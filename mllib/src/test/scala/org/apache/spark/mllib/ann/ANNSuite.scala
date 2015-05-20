@@ -27,7 +27,7 @@ class ANNSuite extends FunSuite with MLlibTestSparkContext {
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
     val initialWeights = FeedForwardModel(topology, 23124).weights()
-    val trainer = new FeedForwardTrainer(topology, 2, 1)
+    val trainer = new FeedForwardTrainer(topology, dataSample._1.size, dataSample._2.size)
     trainer.setWeights(initialWeights)
     trainer.LBFGSOptimizer.setNumIterations(20)
     val model = trainer.train(rddData)
@@ -60,7 +60,7 @@ class ANNSuite extends FunSuite with MLlibTestSparkContext {
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
     val initialWeights = FeedForwardModel(topology, 23124).weights()
-    val trainer = new FeedForwardTrainer(topology, 2, 2)
+    val trainer = new FeedForwardTrainer(topology, dataSample._1.size, dataSample._2.size)
     trainer.SGDOptimizer.setNumIterations(2000)
     //trainer.LBFGSOptimizer.setNumIterations(100)
     trainer.setWeights(initialWeights)
