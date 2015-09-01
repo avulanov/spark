@@ -19,13 +19,13 @@ package org.apache.spark.ml.classification
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
-import org.apache.spark.ml.param.{IntArrayParam, IntParam, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasTol}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.ml.param.shared.{HasTol, HasMaxIter, HasSeed}
+import org.apache.spark.ml.{PredictorParams, PredictionModel, Predictor}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.ann.{FeedForwardTrainer, FeedForwardTopology}
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 
@@ -65,7 +65,31 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   /** @group getParam */
   final def getBlockSize: Int = $(blockSize)
 
-  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128)
+  /**
+   * Optimizer setup.
+   * @group expertParam
+   */
+  final val optimizer: Param[String] = new Param[String](this, "optimizer",
+    " Allows setting the optimizer: minibatch gradient descent (GD) or LBFGS. " +
+      " The latter is recommended one. ",
+    ParamValidators.inArray[String](Array("GD", "LBFGS")))
+
+  /** @group getParam */
+  final def getOptimizer: String = $(optimizer)
+
+  /**
+   * Learning rate.
+   * @group expertParam
+   */
+  final val learningRate: DoubleParam = new DoubleParam(this, "learning rate",
+    " Sets the learning rate for gradient descent optimizer ",
+    ParamValidators.inRange(0, 1))
+
+  /** @group getParam */
+  final def getLearningRate: Double = $(learningRate)
+
+  setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128,
+    optimizer -> "LBFGS", learningRate -> 0.03)
 }
 
 /** Label to vector converter. */
@@ -104,23 +128,19 @@ private object LabelConverter {
  * Each layer has sigmoid activation function, output layer has softmax.
  * Number of inputs has to be equal to the size of feature vectors.
  * Number of outputs has to be equal to the total number of labels.
+ *
  */
-@Since("1.5.0")
 @Experimental
-class MultilayerPerceptronClassifier @Since("1.5.0") (
-    @Since("1.5.0") override val uid: String)
+class MultilayerPerceptronClassifier(override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams {
 
-  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mlpc"))
 
   /** @group setParam */
-  @Since("1.5.0")
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
   /** @group setParam */
-  @Since("1.5.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   /**
@@ -128,7 +148,6 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * Default is 100.
    * @group setParam
    */
-  @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
@@ -137,17 +156,14 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    * Default is 1E-4.
    * @group setParam
    */
-  @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
    * Set the seed for weights initialization.
    * @group setParam
    */
-  @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
   /**
@@ -181,16 +197,14 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
  * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model
  */
-@Since("1.5.0")
 @Experimental
 class MultilayerPerceptronClassificationModel private[ml] (
-    @Since("1.5.0") override val uid: String,
-    @Since("1.5.0") val layers: Array[Int],
-    @Since("1.5.0") val weights: Vector)
+    override val uid: String,
+    val layers: Array[Int],
+    val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable {
 
-  @Since("1.6.0")
   override val numFeatures: Int = layers.head
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).getInstance(weights)
@@ -210,7 +224,6 @@ class MultilayerPerceptronClassificationModel private[ml] (
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
-  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
     copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }
