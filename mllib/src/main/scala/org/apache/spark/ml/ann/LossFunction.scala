@@ -110,3 +110,61 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
     -Bsum( target :* Blog(output)) / output.cols
   }
 }
+
+class EmptyLayerWithSquaredError extends Layer {
+  override val weightSize = 0
+  override def outputSize(inputSize: Int): Int = inputSize
+  override val inPlace = true
+  override def model(weights: BDV[Double]): LayerModel =
+    new EmptyLayerModelWithSquaredError()
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+    new EmptyLayerModelWithSquaredError()
+}
+
+class EmptyLayerModelWithSquaredError extends LayerModel with LossFunction {
+
+  private lazy val emptyWeights = new Array[Double](0)
+
+  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
+    UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    Bsum(delta :* delta) / 2 / output.cols
+  }
+
+  override def eval(data: BDM[Double], output: BDM[Double]): Unit = {}
+  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {}
+  override def weights(): Vector = Vectors.dense(emptyWeights)
+  override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
+}
+
+class SigmoidLayerWithCrossEntropyLoss extends Layer {
+  override val weightSize = 0
+  override def outputSize(inputSize: Int): Int = inputSize
+  override val inPlace = true
+  override def model(weights: BDV[Double]): LayerModel =
+    new SigmoidLayerModelWithCrossEntropyLoss()
+  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+    new SigmoidLayerModelWithCrossEntropyLoss()
+}
+
+class SigmoidLayerModelWithCrossEntropyLoss extends FunctionalLayerModel(new SigmoidFunction)
+with LossFunction {
+  // TODO: make a common place where ones matrices reside
+  private var oneMatrix: BDM[Double] = null
+  private val epsilon = 1e-15
+  private var epsilonMatrix: BDM[Double] = null
+
+  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
+    if (oneMatrix == null || oneMatrix.cols != target.cols) {
+      oneMatrix = BDM.ones[Double](target.rows, target.cols)
+    }
+    if (epsilonMatrix == null || epsilonMatrix.cols != target.cols) {
+      epsilonMatrix = BDM.fill[Double](target.rows, target.cols)(epsilon)
+    }
+    UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    // NB: operation :* don't have execution priority over summation
+    // TODO: is adding epsilon a good way to fight log(o) ?
+    -Bsum((target :* Blog(output + epsilonMatrix)) +
+      ((oneMatrix - target) :* Blog(oneMatrix - output + epsilonMatrix))) / output.cols
+  }
+}
+
