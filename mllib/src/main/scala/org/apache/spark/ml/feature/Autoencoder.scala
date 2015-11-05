@@ -104,9 +104,17 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     fit2(dataset)._1
   }
 
+  /**
+   * Fits a model to the input data.
+   * @param dataset dataset
+   * @return encoder and decoder models
+   */
   def fit2(dataset: DataFrame): (AutoencoderModel, AutoencoderModel) = {
     val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
-    val myLayers = $(layers)
+    val encoderLayers = $(layers)
+    val decoderLayers = $(layers).reverse
+    val myLayers = encoderLayers ++ decoderLayers.tail
+    println("Layers:" + myLayers.mkString(" "))
     // TODO: initialize topology based on the data type (binary, real [0..1], real)
     // binary => false + cross entropy (works with false + sq error)
     // real [0..1] => false + sq error (sq error is slow for sigmoid!)
@@ -141,10 +149,14 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     // in case of deep autoencoders
     // TODO: what about decoder back to normal?
     val allWeights = autoencoderModel.weights()
-    val encoder = new AutoencoderModel(uid, myLayers.init, allWeights, false)
-    val offset = autoencoderModel.layers(0).weightSize
+    val encoder = new AutoencoderModel(uid, encoderLayers, allWeights, false)
+    var offset = 0
+    for (i <- 0 until encoderLayers.size - 1) {
+      offset += autoencoderModel.layers(i).weightSize
+    }
+    //val offset = autoencoderModel.layers(0).weightSize
     val decoderWeights = Vectors.fromBreeze(new BDV(allWeights.toArray, offset))
-    val decoder = new AutoencoderModel(uid + "decoder", myLayers.tail, decoderWeights, linearOutput)
+    val decoder = new AutoencoderModel(uid + "decoder", decoderLayers, decoderWeights, linearOutput)
     (encoder, decoder)
   }
 

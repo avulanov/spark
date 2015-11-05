@@ -44,10 +44,10 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Autoencoder suite for binary input") {
     // TODO: implement autoencoder test for real in [0;1) and (-inf;+inf)
-    val rdd = sc.parallelize(realData, 1).map(x => Tuple1(x))
+    val rdd = sc.parallelize(real01Data, 1).map(x => Tuple1(x))
     val df = sqlContext.createDataFrame(rdd).toDF("input")
     val autoencoder = new Autoencoder()
-      .setLayers(Array(4, 3, 4))
+      .setLayers(Array(4, 3))
       .setBlockSize(1)
 //      .setMaxIter(1000)
 //      .setOptimizer("GD")
