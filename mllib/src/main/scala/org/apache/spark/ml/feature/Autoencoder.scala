@@ -111,9 +111,10 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
    */
   def fit2(dataset: DataFrame): (AutoencoderModel, AutoencoderModel) = {
     val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
-    val encoderLayers = $(layers)
-    val decoderLayers = $(layers).reverse
-    val myLayers = encoderLayers ++ decoderLayers.tail
+    // NB! the size of the setup array does not correspond to the number of actual layers
+    val encoderLayerSetup = $(layers)
+    val decoderLayerSetup = $(layers).reverse
+    val myLayers = encoderLayerSetup ++ decoderLayerSetup.tail
     println("Layers:" + myLayers.mkString(" "))
     // TODO: initialize topology based on the data type (binary, real [0..1], real)
     // binary => false + cross entropy (works with false + sq error)
@@ -124,9 +125,11 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     val linearOutput = if (inputDataType(data) == InputDataType.Real) true else false
     println("Building Autoencoder with linear = " + linearOutput)
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, false)
+    assert(topology.layers.length % 2 == 0)
+    val middleLayer = topology.layers.length / 2
     topology.layers(topology.layers.length - 1) =
       if (linearOutput) new EmptyLayerWithSquaredError()
-      else new SigmoidLayerWithCrossEntropyLoss()
+      else new SigmoidLayerWithSquaredError()
     val FeedForwardTrainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
     $(optimizer) match {
       case "GD" =>
@@ -144,19 +147,19 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
         .setNumIterations($(maxIter))
     }
     FeedForwardTrainer.setStackSize($(blockSize))
-    val autoencoderModel = FeedForwardTrainer.train(data)
-    // TODO: parameter for the layer which is supposed to be encoder output
-    // in case of deep autoencoders
-    // TODO: what about decoder back to normal?
-    val allWeights = autoencoderModel.weights()
-    val encoder = new AutoencoderModel(uid, encoderLayers, allWeights, false)
-    var offset = 0
-    for (i <- 0 until encoderLayers.size - 1) {
-      offset += autoencoderModel.layers(i).weightSize
+    val encoderDecoderModel = FeedForwardTrainer.train(data)
+    val allWeights = encoderDecoderModel.weights().toArray
+    var encoderWeightSize = 0
+    for (i <- 0 until middleLayer) {
+      encoderWeightSize += encoderDecoderModel.layers(i).weightSize
     }
-    //val offset = autoencoderModel.layers(0).weightSize
-    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights.toArray, offset))
-    val decoder = new AutoencoderModel(uid + "decoder", decoderLayers, decoderWeights, linearOutput)
+    println("encoder:" + encoderLayerSetup.mkString(" "))
+    println("decoder:" + decoderLayerSetup.mkString(" "))
+    println("encoderWeightSize:" + encoderWeightSize)
+    val encoderWeights = Vectors.fromBreeze(new BDV(allWeights, 0, 1, encoderWeightSize))
+    val encoder = new AutoencoderModel(uid, encoderLayerSetup, encoderWeights, false)
+    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights, encoderWeightSize))
+    val decoder = new AutoencoderModel(uid + "decoder", decoderLayerSetup, decoderWeights, linearOutput)
     (encoder, decoder)
   }
 
@@ -214,7 +217,7 @@ class AutoencoderModel private[ml] (override val uid: String,
     // TODO: don't add a layer if the output is linear
     topology.layers(topology.layers.length - 1) =
       if (linearOutput) new EmptyLayerWithSquaredError()
-        else new SigmoidLayerWithCrossEntropyLoss()
+        else new SigmoidLayerWithSquaredError()
     topology.getInstance(weights)
   }
 

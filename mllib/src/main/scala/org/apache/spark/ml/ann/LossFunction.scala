@@ -36,7 +36,7 @@ private[ann] trait LossFunction {
   def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double
 }
 
-private[ann] class SigmoidLayerWithSquaredError extends Layer {
+private[ml] class SigmoidLayerWithSquaredError extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
@@ -55,7 +55,7 @@ private[ann] class SigmoidLayerModelWithSquaredError
   }
 }
 
-private[ann] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
+private[ml] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
@@ -111,7 +111,7 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
   }
 }
 
-class EmptyLayerWithSquaredError extends Layer {
+private[ml] class EmptyLayerWithSquaredError extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
@@ -121,7 +121,7 @@ class EmptyLayerWithSquaredError extends Layer {
     new EmptyLayerModelWithSquaredError()
 }
 
-class EmptyLayerModelWithSquaredError extends LayerModel with LossFunction {
+private[ann] class EmptyLayerModelWithSquaredError extends LayerModel with LossFunction {
 
   private lazy val emptyWeights = new Array[Double](0)
 
@@ -136,7 +136,7 @@ class EmptyLayerModelWithSquaredError extends LayerModel with LossFunction {
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
 }
 
-class SigmoidLayerWithCrossEntropyLoss extends Layer {
+private[ml] class SigmoidLayerWithCrossEntropyLoss extends Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
@@ -146,7 +146,7 @@ class SigmoidLayerWithCrossEntropyLoss extends Layer {
     new SigmoidLayerModelWithCrossEntropyLoss()
 }
 
-class SigmoidLayerModelWithCrossEntropyLoss extends FunctionalLayerModel(new SigmoidFunction)
+private[ann] class SigmoidLayerModelWithCrossEntropyLoss extends FunctionalLayerModel(new SigmoidFunction)
 with LossFunction {
   // TODO: make a common place where ones matrices reside
   private var oneMatrix: BDM[Double] = null

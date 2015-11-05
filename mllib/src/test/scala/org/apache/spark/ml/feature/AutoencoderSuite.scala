@@ -22,6 +22,8 @@ import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Vector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
+import breeze.linalg.{DenseMatrix => BDM}
+
 class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
 
   // using data from https://inst.eecs.berkeley.edu/~cs182/sp08/assignments/a3-tlearn.html
@@ -37,23 +39,24 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
     Vectors.dense(Array(0.5, 0.5, 0.5, 0.45)),
     Vectors.dense(Array(0.9, 0.9, 0.9, 0.9)))
 
-  val realData = Seq(Vectors.dense(Array(10.0, 0.0, 0.0, 0.0)),
+  val realData = Seq(
+    Vectors.dense(Array(10.0, 0.0, 0.0, 0.0)),
     Vectors.dense(Array(0.0, 1.0, 0.0, 0.0)),
     Vectors.dense(Array(0.0, 0.0, 10.0, 0.0)),
     Vectors.dense(Array(0.0, 0.0, 0.0, 10.0)))
 
   test("Autoencoder suite for binary input") {
     // TODO: implement autoencoder test for real in [0;1) and (-inf;+inf)
-    val rdd = sc.parallelize(real01Data, 1).map(x => Tuple1(x))
+    val rdd = sc.parallelize(realData, 1).map(x => Tuple1(x))
     val df = sqlContext.createDataFrame(rdd).toDF("input")
     val autoencoder = new Autoencoder()
-      .setLayers(Array(4, 3))
+      .setLayers(Array(4, 3, 4, 3))
       .setBlockSize(1)
 //      .setMaxIter(1000)
 //      .setOptimizer("GD")
 //      .setLearningRate(1.0)
       .setOptimizer("LBFGS")
-      .setMaxIter(20)
+      .setMaxIter(202)
       .setSeed(111L)
       .setTol(1e-15)
       .setInputCol("input")
