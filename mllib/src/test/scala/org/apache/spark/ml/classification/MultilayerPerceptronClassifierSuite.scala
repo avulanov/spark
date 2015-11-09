@@ -60,7 +60,7 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
-      .setSeed(123L)
+      .setSeed(11L)
       .setMaxIter(100)
       .setTol(1e-6)
     val badModel = trainer.fit(dataFrame)
