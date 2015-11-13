@@ -23,7 +23,7 @@ import org.apache.spark.ml.classification.MultilayerPerceptronParams
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Model, Estimator}
-import org.apache.spark.ml.param.{IntParam, Params, ParamMap}
+import org.apache.spark.ml.param._
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
@@ -36,19 +36,18 @@ import breeze.linalg.{DenseVector => BDV}
  * Params for [[Autoencoder]] and [[AutoencoderModel]].
  */
 private[feature] trait AutoencoderParams extends Params with HasInputCol with HasOutputCol {
-}
+  /**
+   * True if data is in [0, 1] interval.
+   * Default: false
+   * @group expertParam
+   */
+  final val dataIn01Interval: BooleanParam = new BooleanParam(this, "dataIn01Interval",
+    "True if data is in [0, 1] interval." +
+      " Sets the layer on the top of the autoencoder: linear + sigmoid (true) " +
+      " or linear (false)")
 
-/**
- * Input data types enum
- */
-private[feature] object InputDataChecker {
-
-  def isIn01Interval(data: RDD[(Vector, Vector)]): Boolean = {
-    val real01 = data.map { case(x, y) => x.toArray.forall(z => (z >= 0.0 && z <= 1.0))
-    }.reduce { case(p1, p2) => p1 && p2 }
-    return real01
-  }
-
+  /** @group getParam */
+  final def getDataIn01Interval: Boolean = $(dataIn01Interval)
 
 }
 
@@ -63,10 +62,7 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
   def this() = this(Identifiable.randomUID("autoencoder"))
 
   /** @group setParam */
-  def setOptimizer(value: String): this.type = set(optimizer, value)
-
-  /** @group setParam */
-  def setLearningRate(value: Double): this.type = set(learningRate, value)
+  def setDataIn01Interval(value: Boolean): this.type = set(dataIn01Interval, value)
 
   // TODO: make sure that user understands how to set it. Make correctness check
   /** @group setParam */
@@ -109,50 +105,16 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
    */
   override def fit(dataset: DataFrame): AutoencoderModel = {
     val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
-    // NB! the size of the setup array does not correspond to the number of actual layers
-    println("Layers:" + $(layers).mkString(" "))
-    // TODO: initialize topology based on the data type (binary, real [0..1], real)
-    // binary => false + cross entropy (works with false + sq error)
-    // real [0..1] => false + sq error (sq error is slow for sigmoid!)
-    // real [0..1] that sum to one => true + cross entropy (don't need really)
-    // real => remove the top layer + sq error
-    // TODO: how to set one of the mentioned data types?
-    val linearOutput = !InputDataChecker.isIn01Interval(data)
-    println("Building Autoencoder with linear = " + linearOutput)
+    val linearOutput = !$(dataIn01Interval)
     val topology = FeedForwardTopology.multiLayerPerceptron($(layers), false)
     if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
     val FeedForwardTrainer = new FeedForwardTrainer(topology, $(layers)(0), $(layers).last)
-    $(optimizer) match {
-      case "GD" =>
-        val dataSize = data.count()
-        // TODO: implement GD that involves blockSize instead of fraction
-        // TODO: this formula does not make a lot of sense
-        val miniBatchFraction = $(blockSize).toDouble / dataSize
-        FeedForwardTrainer.SGDOptimizer
-          .setConvergenceTol($(tol))
-          .setNumIterations($(maxIter))
-          .setStepSize($(learningRate))
-          .setMiniBatchFraction(miniBatchFraction)
-      case _ => FeedForwardTrainer.LBFGSOptimizer
+    FeedForwardTrainer.LBFGSOptimizer
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
-    }
     FeedForwardTrainer.setStackSize($(blockSize))
     val encoderDecoderModel = FeedForwardTrainer.train(data)
     new AutoencoderModel(uid + "decoder", $(layers), encoderDecoderModel.weights(), linearOutput)
-//    val allWeights = encoderDecoderModel.weights().toArray
-//    var encoderWeightSize = 0
-//    for (i <- 0 until middleLayer) {
-//      encoderWeightSize += encoderDecoderModel.layers(i).weightSize
-//    }
-//    println("encoder:" + encoderLayerSetup.mkString(" "))
-//    println("decoder:" + decoderLayerSetup.mkString(" "))
-//    println("encoderWeightSize:" + encoderWeightSize)
-//    val encoderWeights = Vectors.fromBreeze(new BDV(allWeights, 0, 1, encoderWeightSize))
-//    val encoder = new AutoencoderModel(uid, encoderLayerSetup, encoderWeights, false)
-//    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights, encoderWeightSize))
-//    val decoder = new AutoencoderModel(uid + "decoder", decoderLayerSetup, decoderWeights, linearOutput)
-//    (encoder, decoder)
   }
 
   override def copy(extra: ParamMap): Estimator[AutoencoderModel] = defaultCopy(extra)

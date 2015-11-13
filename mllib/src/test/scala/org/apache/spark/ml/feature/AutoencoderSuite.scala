@@ -44,24 +44,22 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
     Vectors.dense(Array(0.0, 0.0, 10.0, 0.0)),
     Vectors.dense(Array(0.0, 0.0, 0.0, 10.0)))
 
-  test("Test InputData") {
-
-  }
-
   test("Autoencoder reconstructs the original data by encoding and decoding") {
     val dataSets = Seq(binaryData, real01Data, realData)
-    for (data <- dataSets) {
+    val dataTypes = Seq(true, true, false)
+    val dataSetAndTypes = dataSets.zip(dataTypes)
+    for ((data, is01) <- dataSetAndTypes) {
       val rdd = sc.parallelize(data, 1).map(x => Tuple1(x))
       val df = sqlContext.createDataFrame(rdd).toDF("input")
       val autoencoder = new Autoencoder()
         .setLayers(Array(4, 3, 4))
         .setBlockSize(1)
-        .setOptimizer("LBFGS")
         .setMaxIter(100)
         .setSeed(123L)
         .setTol(1e-6)
         .setInputCol("input")
         .setOutputCol("output")
+        .setDataIn01Interval(is01)
       // TODO: find a way to inherit the input and output parameter value from estimator
       val autoencoderModel = autoencoder.fit(df)
       autoencoderModel.setInputCol("input").setOutputCol("encoded")
