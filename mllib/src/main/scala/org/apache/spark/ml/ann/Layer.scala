@@ -478,7 +478,6 @@ private[ml] class FeedForwardModel private(
         new BDV[Double](cumGradientArray, offset, 1, layers(i).weightSize))
       offset += layers(i).weightSize
     }
-    println(loss)
     loss
   }
 

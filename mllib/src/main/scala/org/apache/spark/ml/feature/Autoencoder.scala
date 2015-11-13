@@ -20,7 +20,6 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.ann._
 import org.apache.spark.ml.classification.MultilayerPerceptronParams
-import org.apache.spark.ml.feature.InputDataType.InputDataType
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Model, Estimator}
@@ -42,9 +41,15 @@ private[feature] trait AutoencoderParams extends Params with HasInputCol with Ha
 /**
  * Input data types enum
  */
-private[feature] object InputDataType extends Enumeration {
-  type InputDataType = Value
-  val Binary, Real01, Real = Value
+private[feature] object InputDataChecker {
+
+  def isIn01Interval(data: RDD[(Vector, Vector)]): Boolean = {
+    val real01 = data.map { case(x, y) => x.toArray.forall(z => (z >= 0.0 && z <= 1.0))
+    }.reduce { case(p1, p2) => p1 && p2 }
+    return real01
+  }
+
+
 }
 
 /**
@@ -112,7 +117,7 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     // real [0..1] that sum to one => true + cross entropy (don't need really)
     // real => remove the top layer + sq error
     // TODO: how to set one of the mentioned data types?
-    val linearOutput = if (inputDataType(data) == InputDataType.Real) true else false
+    val linearOutput = !InputDataChecker.isIn01Interval(data)
     println("Building Autoencoder with linear = " + linearOutput)
     val topology = FeedForwardTopology.multiLayerPerceptron($(layers), false)
     if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
@@ -148,17 +153,6 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
 //    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights, encoderWeightSize))
 //    val decoder = new AutoencoderModel(uid + "decoder", decoderLayerSetup, decoderWeights, linearOutput)
 //    (encoder, decoder)
-  }
-
-  private def inputDataType(data: RDD[(Vector, Vector)]): InputDataType = {
-    val (binary, real01) = data.map{ case(x, y) =>
-      (x.toArray.forall(z => (z == 0.0 || z == 1.0)), x.toArray.forall(z => (z >= 0.0 && z <= 1.0)))
-    }.reduce { case(p1, p2) =>
-      (p1._1 && p2._1, p1._2 && p2._2)
-    }
-    if (binary) return InputDataType.Binary
-    if (real01) return InputDataType.Real01
-    InputDataType.Real
   }
 
   override def copy(extra: ParamMap): Estimator[AutoencoderModel] = defaultCopy(extra)
