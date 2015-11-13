@@ -63,7 +63,7 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
   /** @group setParam */
   def setLearningRate(value: Double): this.type = set(learningRate, value)
 
-  // TODO: make sure that user understands how to set it
+  // TODO: make sure that user understands how to set it. Make correctness check
   /** @group setParam */
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
@@ -99,23 +99,13 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
 
   /**
    * Fits a model to the input data.
-   */
-  override def fit(dataset: DataFrame): AutoencoderModel = {
-    fit2(dataset)._1
-  }
-
-  /**
-   * Fits a model to the input data.
    * @param dataset dataset
    * @return encoder and decoder models
    */
-  def fit2(dataset: DataFrame): (AutoencoderModel, AutoencoderModel) = {
+  override def fit(dataset: DataFrame): AutoencoderModel = {
     val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
     // NB! the size of the setup array does not correspond to the number of actual layers
-    val encoderLayerSetup = $(layers)
-    val decoderLayerSetup = $(layers).reverse
-    val myLayers = encoderLayerSetup ++ decoderLayerSetup.tail
-    println("Layers:" + myLayers.mkString(" "))
+    println("Layers:" + $(layers).mkString(" "))
     // TODO: initialize topology based on the data type (binary, real [0..1], real)
     // binary => false + cross entropy (works with false + sq error)
     // real [0..1] => false + sq error (sq error is slow for sigmoid!)
@@ -124,13 +114,9 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     // TODO: how to set one of the mentioned data types?
     val linearOutput = if (inputDataType(data) == InputDataType.Real) true else false
     println("Building Autoencoder with linear = " + linearOutput)
-    val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, false)
-    assert(topology.layers.length % 2 == 0)
-    val middleLayer = topology.layers.length / 2
-    topology.layers(topology.layers.length - 1) =
-      if (linearOutput) new EmptyLayerWithSquaredError()
-      else new SigmoidLayerWithSquaredError()
-    val FeedForwardTrainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), false)
+    if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
+    val FeedForwardTrainer = new FeedForwardTrainer(topology, $(layers)(0), $(layers).last)
     $(optimizer) match {
       case "GD" =>
         val dataSize = data.count()
@@ -148,19 +134,20 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     }
     FeedForwardTrainer.setStackSize($(blockSize))
     val encoderDecoderModel = FeedForwardTrainer.train(data)
-    val allWeights = encoderDecoderModel.weights().toArray
-    var encoderWeightSize = 0
-    for (i <- 0 until middleLayer) {
-      encoderWeightSize += encoderDecoderModel.layers(i).weightSize
-    }
-    println("encoder:" + encoderLayerSetup.mkString(" "))
-    println("decoder:" + decoderLayerSetup.mkString(" "))
-    println("encoderWeightSize:" + encoderWeightSize)
-    val encoderWeights = Vectors.fromBreeze(new BDV(allWeights, 0, 1, encoderWeightSize))
-    val encoder = new AutoencoderModel(uid, encoderLayerSetup, encoderWeights, false)
-    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights, encoderWeightSize))
-    val decoder = new AutoencoderModel(uid + "decoder", decoderLayerSetup, decoderWeights, linearOutput)
-    (encoder, decoder)
+    new AutoencoderModel(uid + "decoder", $(layers), encoderDecoderModel.weights(), linearOutput)
+//    val allWeights = encoderDecoderModel.weights().toArray
+//    var encoderWeightSize = 0
+//    for (i <- 0 until middleLayer) {
+//      encoderWeightSize += encoderDecoderModel.layers(i).weightSize
+//    }
+//    println("encoder:" + encoderLayerSetup.mkString(" "))
+//    println("decoder:" + decoderLayerSetup.mkString(" "))
+//    println("encoderWeightSize:" + encoderWeightSize)
+//    val encoderWeights = Vectors.fromBreeze(new BDV(allWeights, 0, 1, encoderWeightSize))
+//    val encoder = new AutoencoderModel(uid, encoderLayerSetup, encoderWeights, false)
+//    val decoderWeights = Vectors.fromBreeze(new BDV(allWeights, encoderWeightSize))
+//    val decoder = new AutoencoderModel(uid + "decoder", decoderLayerSetup, decoderWeights, linearOutput)
+//    (encoder, decoder)
   }
 
   private def inputDataType(data: RDD[(Vector, Vector)]): InputDataType = {
@@ -211,14 +198,22 @@ class AutoencoderModel private[ml] (override val uid: String,
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  // TODO: make sure that the same topology is created as in Autoencoder
-  private val autoecoderModel = {
-    val topology = FeedForwardTopology.multiLayerPerceptron(layers, false)
-    // TODO: don't add a layer if the output is linear
-    topology.layers(topology.layers.length - 1) =
-      if (linearOutput) new EmptyLayerWithSquaredError()
-        else new SigmoidLayerWithSquaredError()
-    topology.getInstance(weights)
+  private var coderWeightSize = 0
+  private val decoderModel = {
+    val topology = FeedForwardTopology.multiLayerPerceptron(layers.tail, false)
+    for (layer <- topology.layers) {
+      coderWeightSize += layer.weightSize
+    }
+    if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
+    val decoderWeights =
+      Vectors.fromBreeze(new BDV(weights.toArray, weights.size - coderWeightSize))
+    topology.getInstance(decoderWeights)
+  }
+  private val encoderModel = {
+    val topology = FeedForwardTopology.multiLayerPerceptron(layers.init, false)
+    val encoderWeights =
+      Vectors.fromBreeze(new BDV(weights.toArray, 0, 1, coderWeightSize))
+    topology.getInstance(encoderWeights)
   }
 
 
@@ -231,7 +226,15 @@ class AutoencoderModel private[ml] (override val uid: String,
    */
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val pcaOp = udf { autoecoderModel.predict _ }
+    val pcaOp = udf { encoderModel.predict _ }
+    dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+  }
+
+  def encode(dataset: DataFrame): DataFrame = transform(dataset)
+
+  def decode(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    val pcaOp = udf { decoderModel.predict _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
   }
 
