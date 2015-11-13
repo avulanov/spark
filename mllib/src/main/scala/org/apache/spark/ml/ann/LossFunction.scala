@@ -146,8 +146,8 @@ private[ml] class SigmoidLayerWithCrossEntropyLoss extends Layer {
     new SigmoidLayerModelWithCrossEntropyLoss()
 }
 
-private[ann] class SigmoidLayerModelWithCrossEntropyLoss extends FunctionalLayerModel(new SigmoidFunction)
-with LossFunction {
+private[ann] class SigmoidLayerModelWithCrossEntropyLoss
+  extends FunctionalLayerModel(new SigmoidFunction) with LossFunction {
   // TODO: make a common place where ones matrices reside
   private var oneMatrix: BDM[Double] = null
   private val epsilon = 1e-15
