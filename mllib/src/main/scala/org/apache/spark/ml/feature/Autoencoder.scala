@@ -99,6 +99,13 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
+   * Set the model weights.
+   * @group setParam
+   */
+  def setWeights(value: Vector): this.type = set(weights, value)
+
+
+  /**
    * Fits a model to the input data.
    * @param dataset dataset
    * @return encoder and decoder models

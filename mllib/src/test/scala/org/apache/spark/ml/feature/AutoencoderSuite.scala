@@ -65,6 +65,8 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
       autoencoderModel.setInputCol("input").setOutputCol("encoded")
       // encoding
       val encodedData = autoencoderModel.transform(df)
+      encodedData.collect.foreach(println)
+
       // decoding
       autoencoderModel.setInputCol("encoded").setOutputCol("decoded")
       val decodedData = autoencoderModel.decode(encodedData)
