@@ -114,7 +114,7 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
         .setNumIterations($(maxIter))
     FeedForwardTrainer.setStackSize($(blockSize))
     val encoderDecoderModel = FeedForwardTrainer.train(data)
-    new AutoencoderModel(uid + "decoder", $(layers), encoderDecoderModel.weights(), linearOutput)
+    new AutoencoderModel(uid + "decoder", $(layers), encoderDecoderModel.weights, linearOutput)
   }
 
   override def copy(extra: ParamMap): Estimator[AutoencoderModel] = defaultCopy(extra)
@@ -163,13 +163,13 @@ class AutoencoderModel private[ml] (
     if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
     val decoderWeights =
       Vectors.fromBreeze(new BDV(weights.toArray, weights.size - coderWeightSize))
-    topology.getInstance(decoderWeights)
+    topology.model(decoderWeights)
   }
   private val encoderModel = {
     val topology = FeedForwardTopology.multiLayerPerceptron(layers.init, false)
     val encoderWeights =
       Vectors.fromBreeze(new BDV(weights.toArray, 0, 1, coderWeightSize))
-    topology.getInstance(encoderWeights)
+    topology.model(encoderWeights)
   }
 
 

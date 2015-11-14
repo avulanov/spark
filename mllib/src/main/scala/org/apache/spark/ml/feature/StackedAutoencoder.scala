@@ -97,7 +97,7 @@ class StackedAutoencoder (override val uid: String)
         .setNumIterations($(maxIter))
       FeedForwardTrainer.setStackSize($(blockSize))
       val encoderDecoderModel = FeedForwardTrainer.train(data)
-      val encoderDecoderWeights = encoderDecoderModel.weights().toArray
+      val encoderDecoderWeights = encoderDecoderModel.weights.toArray
       // derive encoder and decoder
       var coderWeightSize = 0
       for (layer <- topology.layers) {
@@ -111,18 +111,18 @@ class StackedAutoencoder (override val uid: String)
         Vectors.fromBreeze(
           new BDV(encoderDecoderWeights.toArray, encoderDecoderWeights.size - coderWeightSize))
 
-      val decoderModel = topology.getInstance(decoderWeights)
+      val decoderModel = topology.model(decoderWeights)
       val encoderTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers.init, false)
       val encoderWeights =
       Vectors.fromBreeze(new BDV(encoderDecoderWeights, 0, 1, coderWeightSize))
-      val encoderModel = encoderTopology.getInstance(encoderWeights)
+      val encoderModel = encoderTopology.model(encoderWeights)
       // TODO: unite en and de into the stack.
     }
     // TODO: pass relevant parameters. How to pass weights?
     new StackedAutoencoderModel(uid + "decoder", $(layers), null, linearOutput)
   }
 
-  override def copy(extra: ParamMap): Estimator[AutoencoderModel] = defaultCopy(extra)
+  override def copy(extra: ParamMap): Estimator[StackedAutoencoderModel] = defaultCopy(extra)
 
   /**
    * :: DeveloperApi ::

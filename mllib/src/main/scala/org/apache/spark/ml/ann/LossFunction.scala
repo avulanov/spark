@@ -123,7 +123,7 @@ private[ml] class EmptyLayerWithSquaredError extends Layer {
 
 private[ann] class EmptyLayerModelWithSquaredError extends LayerModel with LossFunction {
 
-  private lazy val emptyWeights = new Array[Double](0)
+  val weights = new BDV[Double](0)
 
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
@@ -132,7 +132,6 @@ private[ann] class EmptyLayerModelWithSquaredError extends LayerModel with LossF
 
   override def eval(data: BDM[Double], output: BDM[Double]): Unit = {}
   override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {}
-  override def weights(): Vector = Vectors.dense(emptyWeights)
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
 }
 
@@ -147,7 +146,7 @@ private[ml] class SigmoidLayerWithCrossEntropyLoss extends Layer {
 }
 
 private[ann] class SigmoidLayerModelWithCrossEntropyLoss
-  extends FunctionalLayerModel(new SigmoidFunction) with LossFunction {
+  extends FunctionalLayerModel(new FunctionalLayer(new SigmoidFunction)) with LossFunction {
   // TODO: make a common place where ones matrices reside
   private var oneMatrix: BDM[Double] = null
   private val epsilon = 1e-15
