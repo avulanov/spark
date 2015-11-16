@@ -110,15 +110,16 @@ class StackedAutoencoder (override val uid: String)
     } else {
       null
     }
-    val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
+    // TODO: use single instance of vectors
+    var data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
     val linearOutput = !$(dataIn01Interval)
     // Train autoencoder for each layer except the last
     for (i <- 0 until $(layers).length - 1) {
       val currentLayers = Array($(layers)(i), $(layers)(i + 1), $(layers)(i))
       val currentTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers, false)
-      val isLastWithLinear = i == $(layers).length - 2 && linearOutput
-      println("Current:" + currentLayers.mkString(" ") + " " + isLastWithLinear)
-      if (isLastWithLinear) {
+      val isLastLayer = i == $(layers).length - 2
+      println("Current last+linear:" + currentLayers.mkString(" ") + " " + (isLastLayer && linearOutput))
+      if (isLastLayer && linearOutput) {
         currentTopology.layers(currentTopology.layers.length - 1) = new EmptyLayerWithSquaredError()
       }
       val FeedForwardTrainer = new FeedForwardTrainer(currentTopology, currentLayers(0), currentLayers.last)
@@ -133,6 +134,18 @@ class StackedAutoencoder (override val uid: String)
       val encoderWeightSize = currentTopology.layers(0).weightSize
       System.arraycopy(currentWeights, 0, stackedEncoderWeights, stackedEncoderOffset, encoderWeightSize)
       stackedEncoderOffset += encoderWeightSize
+      // input data for the next autoencoder in the stack
+      if (!isLastLayer) {
+        val encoderTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers.init, false)
+        // Due to Vector inefficiency it will copy weights
+        val encoderModel = encoderTopology.model(
+          Vectors.fromBreeze(new BDV[Double](currentWeights, 0, 1, encoderWeightSize)))
+        // TODO: add cache
+        data = data.map { x =>
+          val y = encoderModel.predict(x._1)
+          (y, y)
+        }
+      }
       // if needs decoder
       if ($(buildDecoder)) {
         val decoderWeightSize = currentWeights.length - encoderWeightSize
@@ -141,7 +154,8 @@ class StackedAutoencoder (override val uid: String)
           stackedDecoderOffset, decoderWeightSize)
       }
     }
-    new StackedAutoencoderModel(uid + "model", $(layers), Vectors.dense(stackedEncoderWeights), linearOutput)
+    new StackedAutoencoderModel(uid + "model", $(layers), Vectors.dense(stackedEncoderWeights),
+      Vectors.dense(stackedDecoderWeights), linearOutput)
   }
 
   override def copy(extra: ParamMap): Estimator[StackedAutoencoderModel] = defaultCopy(extra)
@@ -166,7 +180,8 @@ class StackedAutoencoder (override val uid: String)
 class StackedAutoencoderModel private[ml] (
     override val uid: String,
     val layers: Array[Int],
-    val weights: Vector,
+    val encoderWeights: Vector,
+    val decoderWeights: Vector,
     linearOutput: Boolean) extends Model[StackedAutoencoderModel] with AutoencoderParams {
 
   /** @group setParam */
@@ -177,11 +192,21 @@ class StackedAutoencoderModel private[ml] (
 
   private val encoderModel = {
     val topology = FeedForwardTopology.multiLayerPerceptron(layers, false)
-    topology.model(weights)
+    topology.model(encoderWeights)
+  }
+
+  private val decoderModel = {
+    if (decoderWeights != null) {
+      val topology = FeedForwardTopology.multiLayerPerceptron(layers.reverse, false)
+      if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
+      topology.model(decoderWeights)
+    } else {
+      null
+    }
   }
 
   override def copy(extra: ParamMap): StackedAutoencoderModel = {
-    copyValues(new StackedAutoencoderModel(uid, layers, weights, linearOutput), extra)
+    copyValues(new StackedAutoencoderModel(uid, layers, encoderWeights, decoderWeights, linearOutput), extra)
   }
 
   /**
@@ -190,6 +215,14 @@ class StackedAutoencoderModel private[ml] (
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val pcaOp = udf { encoderModel.predict _ }
+    dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
+  }
+
+  def encode(dataset: DataFrame): DataFrame = transform(dataset)
+
+  def decode(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    val pcaOp = udf { decoderModel.predict _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
   }
 

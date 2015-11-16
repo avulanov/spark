@@ -66,6 +66,10 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
       // encoding
       val encodedData = saModel.transform(df)
       encodedData.collect.foreach(println)
+      // decoding
+      saModel.setInputCol("encoded").setOutputCol("decoded")
+      val decodedData = saModel.decode(encodedData)
+      decodedData.collect.foreach(println)
     }
   }
 
