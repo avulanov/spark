@@ -41,6 +41,9 @@ class StackedAutoencoder (override val uid: String)
   /** @group setParam */
   def setDataIn01Interval(value: Boolean): this.type = set(dataIn01Interval, value)
 
+  /** @group setParam */
+  def setBuildDecoder(value: Boolean): this.type = set(buildDecoder, value)
+
   // TODO: make sure that user understands how to set it. Make correctness check
   /** @group setParam */
   def setLayers(value: Array[Int]): this.type = set(layers, value)
@@ -86,15 +89,30 @@ class StackedAutoencoder (override val uid: String)
    */
   override def fit(dataset: DataFrame): StackedAutoencoderModel = {
     println("Topology:" + $(layers).mkString(" "))
-    val stackedWeights = if ($(weights) == null) {
-      FeedForwardTopology.multiLayerPerceptron($(layers)).model($(seed)).weights.toArray
+    var stackedEncoderOffset = 0
+    val stackedEncoderWeights = if ($(weights) == null) {
+      val size =
+        FeedForwardTopology.multiLayerPerceptron($(layers)).layers.foldLeft(0)( (b, layer) =>
+          b + layer.weightSize)
+      new Array[Double](size)
     } else {
       $(weights).toArray
+    }
+    // decoder if needed
+    var stackedDecoderOffset = 0
+    val decoderLayers = $(layers).reverse
+    val stackedDecoderWeights: Array[Double] = if ($(buildDecoder)) {
+      val size =
+        FeedForwardTopology.multiLayerPerceptron(decoderLayers).layers.foldLeft(0)( (b, layer) =>
+          b + layer.weightSize)
+      stackedDecoderOffset = size
+      new Array[Double](size)
+    } else {
+      null
     }
     val data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
     val linearOutput = !$(dataIn01Interval)
     // Train autoencoder for each layer except the last
-    var offset = 0
     for (i <- 0 until $(layers).length - 1) {
       val currentLayers = Array($(layers)(i), $(layers)(i + 1), $(layers)(i))
       val currentTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers, false)
@@ -112,11 +130,18 @@ class StackedAutoencoder (override val uid: String)
         .setSeed($(seed))
       val currentModel = FeedForwardTrainer.train(data)
       val currentWeights = currentModel.weights.toArray
-      var weightSize = currentTopology.layers(0).weightSize
-      System.arraycopy(currentWeights, 0, stackedWeights, offset, weightSize)
-      offset += weightSize
+      val encoderWeightSize = currentTopology.layers(0).weightSize
+      System.arraycopy(currentWeights, 0, stackedEncoderWeights, stackedEncoderOffset, encoderWeightSize)
+      stackedEncoderOffset += encoderWeightSize
+      // if needs decoder
+      if ($(buildDecoder)) {
+        val decoderWeightSize = currentWeights.length - encoderWeightSize
+        stackedDecoderOffset -= decoderWeightSize
+        System.arraycopy(currentWeights, encoderWeightSize, stackedDecoderWeights,
+          stackedDecoderOffset, decoderWeightSize)
+      }
     }
-    new StackedAutoencoderModel(uid + "model", $(layers), Vectors.dense(stackedWeights), linearOutput)
+    new StackedAutoencoderModel(uid + "model", $(layers), Vectors.dense(stackedEncoderWeights), linearOutput)
   }
 
   override def copy(extra: ParamMap): Estimator[StackedAutoencoderModel] = defaultCopy(extra)
@@ -140,8 +165,8 @@ class StackedAutoencoder (override val uid: String)
 @Experimental
 class StackedAutoencoderModel private[ml] (
     override val uid: String,
-    layers: Array[Int],
-    weights: Vector,
+    val layers: Array[Int],
+    val weights: Vector,
     linearOutput: Boolean) extends Model[StackedAutoencoderModel] with AutoencoderParams {
 
   /** @group setParam */
@@ -154,8 +179,6 @@ class StackedAutoencoderModel private[ml] (
     val topology = FeedForwardTopology.multiLayerPerceptron(layers, false)
     topology.model(weights)
   }
-
-  def getWeights() = encoderModel.weights
 
   override def copy(extra: ParamMap): StackedAutoencoderModel = {
     copyValues(new StackedAutoencoderModel(uid, layers, weights, linearOutput), extra)

@@ -49,6 +49,16 @@ private[feature] trait AutoencoderParams extends Params with HasInputCol with Ha
   /** @group getParam */
   final def getDataIn01Interval: Boolean = $(dataIn01Interval)
 
+  /**
+   * True if one wants to have decoder.
+   * Default: false
+   * @group expertParam
+   */
+  final val buildDecoder: BooleanParam = new BooleanParam(this, "buildDecoder",
+    "True to produce a decoder.")
+
+  /** @group getParam */
+  final def getBuildDecoder: Boolean = $(buildDecoder)
 }
 
 /**
@@ -153,8 +163,8 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
 @Experimental
 class AutoencoderModel private[ml] (
     override val uid: String,
-    layers: Array[Int],
-    weights: Vector,
+    val layers: Array[Int],
+    val weights: Vector,
     linearOutput: Boolean) extends Model[AutoencoderModel] with AutoencoderParams {
 
   /** @group setParam */
@@ -180,8 +190,6 @@ class AutoencoderModel private[ml] (
       Vectors.fromBreeze(new BDV(weights.toArray, 0, 1, coderWeightSize))
     topology.model(encoderWeights)
   }
-
-  def getWeights() = encoderModel.weights
 
   override def copy(extra: ParamMap): AutoencoderModel = {
     copyValues(new AutoencoderModel(uid, layers, weights, linearOutput), extra)

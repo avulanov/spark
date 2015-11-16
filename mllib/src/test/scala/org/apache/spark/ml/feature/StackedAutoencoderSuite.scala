@@ -59,12 +59,12 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
         .setInputCol("input")
         .setOutputCol("output")
         .setDataIn01Interval(is01)
+        .setBuildDecoder(true)
       // TODO: find a way to inherit the input and output parameter value from estimator
       val saModel = stackedAutoencoder.fit(df)
       saModel.setInputCol("input").setOutputCol("encoded")
       // encoding
       val encodedData = saModel.transform(df)
-      println(saModel.getWeights())
       encodedData.collect.foreach(println)
     }
   }
