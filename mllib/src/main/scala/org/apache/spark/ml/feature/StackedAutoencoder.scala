@@ -97,9 +97,9 @@ class StackedAutoencoder (override val uid: String)
     var offset = 0
     for (i <- 0 until $(layers).length - 1) {
       val currentLayers = Array($(layers)(i), $(layers)(i + 1), $(layers)(i))
-      println("Current:" + currentLayers.mkString(" "))
       val currentTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers, false)
-      val isLastWithLinear = i == $(layers).length - 3 && linearOutput
+      val isLastWithLinear = i == $(layers).length - 2 && linearOutput
+      println("Current:" + currentLayers.mkString(" ") + " " + isLastWithLinear)
       if (isLastWithLinear) {
         currentTopology.layers(currentTopology.layers.length - 1) = new EmptyLayerWithSquaredError()
       }
@@ -107,7 +107,9 @@ class StackedAutoencoder (override val uid: String)
       FeedForwardTrainer.LBFGSOptimizer
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
-      FeedForwardTrainer.setStackSize($(blockSize))
+      FeedForwardTrainer
+        .setStackSize($(blockSize))
+        .setSeed($(seed))
       val currentModel = FeedForwardTrainer.train(data)
       val currentWeights = currentModel.weights.toArray
       var weightSize = currentTopology.layers(0).weightSize
@@ -152,6 +154,8 @@ class StackedAutoencoderModel private[ml] (
     val topology = FeedForwardTopology.multiLayerPerceptron(layers, false)
     topology.model(weights)
   }
+
+  def getWeights() = encoderModel.weights
 
   override def copy(extra: ParamMap): StackedAutoencoderModel = {
     copyValues(new StackedAutoencoderModel(uid, layers, weights, linearOutput), extra)

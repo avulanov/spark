@@ -119,7 +119,9 @@ class Autoencoder (override val uid: String) extends Estimator[AutoencoderModel]
     FeedForwardTrainer.LBFGSOptimizer
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
-    FeedForwardTrainer.setStackSize($(blockSize))
+    FeedForwardTrainer
+      .setStackSize($(blockSize))
+      .setSeed($(seed))
     val encoderDecoderModel = FeedForwardTrainer.train(data)
     new AutoencoderModel(uid + "decoder", $(layers), encoderDecoderModel.weights, linearOutput)
   }
@@ -179,6 +181,7 @@ class AutoencoderModel private[ml] (
     topology.model(encoderWeights)
   }
 
+  def getWeights() = encoderModel.weights
 
   override def copy(extra: ParamMap): AutoencoderModel = {
     copyValues(new AutoencoderModel(uid, layers, weights, linearOutput), extra)

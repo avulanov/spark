@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
-import org.apache.spark.mllib.util.TestingUtils._
+import org.scalatest.FunSuite
 
-class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
+class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
 
   // using data similar to https://inst.eecs.berkeley.edu/~cs182/sp08/assignments/a3-tlearn.html
   val binaryData = Seq(
@@ -51,8 +50,8 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
     for ((data, is01) <- dataSetAndTypes) {
       val rdd = sc.parallelize(data, 1).map(x => Tuple1(x))
       val df = sqlContext.createDataFrame(rdd).toDF("input")
-      val autoencoder = new Autoencoder()
-        .setLayers(Array(4, 3, 4))
+      val stackedAutoencoder = new StackedAutoencoder()
+        .setLayers(Array(4, 3))
         .setBlockSize(1)
         .setMaxIter(100)
         .setSeed(123L)
@@ -61,20 +60,13 @@ class AutoencoderSuite  extends SparkFunSuite with MLlibTestSparkContext {
         .setOutputCol("output")
         .setDataIn01Interval(is01)
       // TODO: find a way to inherit the input and output parameter value from estimator
-      val autoencoderModel = autoencoder.fit(df)
-      autoencoderModel.setInputCol("input").setOutputCol("encoded")
+      val saModel = stackedAutoencoder.fit(df)
+      saModel.setInputCol("input").setOutputCol("encoded")
       // encoding
-      val encodedData = autoencoderModel.transform(df)
-      println(autoencoderModel.getWeights())
+      val encodedData = saModel.transform(df)
+      println(saModel.getWeights())
       encodedData.collect.foreach(println)
-
-      // decoding
-      autoencoderModel.setInputCol("encoded").setOutputCol("decoded")
-      val decodedData = autoencoderModel.decode(encodedData)
-      val eps = 0.001
-      decodedData.collect.foreach { case Row(input: Vector, _: Vector, decoded: Vector) =>
-        assert(input ~== decoded absTol eps)
-      }
     }
   }
+
 }
