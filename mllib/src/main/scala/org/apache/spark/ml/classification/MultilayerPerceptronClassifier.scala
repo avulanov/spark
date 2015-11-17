@@ -19,7 +19,7 @@ package org.apache.spark.ml.classification
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{Since, Experimental}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.param.{DoubleParam, IntArrayParam, IntParam, Param, ParamMap,
@@ -189,6 +189,15 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
    */
   @Since("2.0.0")
   def setWeights(value: Vector): this.type = set(weights, value)
+
+  /**
+    * Generate weights.
+    */
+  @Since("2.0.0")
+  def generateWeights(): Vector = {
+    val topology = FeedForwardTopology.multiLayerPerceptron($(layers), true)
+    topology.model($(seed)).weights
+  }
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)

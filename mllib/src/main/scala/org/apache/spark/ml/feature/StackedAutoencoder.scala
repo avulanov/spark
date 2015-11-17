@@ -107,7 +107,7 @@ class StackedAutoencoder (override val uid: String)
       stackedDecoderOffset = size
       new Array[Double](size)
     } else {
-      null
+      new Array[Double](0)
     }
     // TODO: use single instance of vectors
     var data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
@@ -129,6 +129,7 @@ class StackedAutoencoder (override val uid: String)
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
       val currentModel = FeedForwardTrainer.train(data)
+      println("trained")
       val currentWeights = currentModel.weights.toArray
       val encoderWeightSize = currentTopology.layers(0).weightSize
       System.arraycopy(
@@ -196,7 +197,7 @@ class StackedAutoencoderModel private[ml] (
   }
 
   private val decoderModel = {
-    if (decoderWeights != null) {
+    if (decoderWeights != null && decoderWeights.size > 0) {
       val topology = FeedForwardTopology.multiLayerPerceptron(layers.reverse, false)
       if (linearOutput) {
         topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()

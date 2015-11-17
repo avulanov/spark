@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.apache.spark.ml.ann.{FeedForwardTrainer, FeedForwardModel, FeedForwardTopology}
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
@@ -45,40 +47,96 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
     Vectors.dense(Array(0.0, 0.0, 10.0, 0.0)),
     Vectors.dense(Array(0.0, 0.0, 0.0, 10.0)))
 
-  test("Autoencoder reconstructs the original data by encoding and decoding") {
-    val dataSets = Seq(binaryData, real01Data, realData)
-    val dataTypes = Seq(true, true, false)
-    val dataSetAndTypes = dataSets.zip(dataTypes)
-    for ((data, is01) <- dataSetAndTypes) {
-      val rdd = sc.parallelize(data, 1).map(x => Tuple1(x))
-      val df = sqlContext.createDataFrame(rdd).toDF("input")
-      val stackedAutoencoder = new StackedAutoencoder()
-        .setLayers(Array(4, 3, 3))
-        .setBlockSize(1)
-        .setMaxIter(100)
-        .setSeed(123L)
-        .setTol(1e-6)
-        .setInputCol("input")
-        .setOutputCol("output")
-        .setDataIn01Interval(is01)
-        .setBuildDecoder(true)
-      // TODO: find a way to inherit the input and output parameter value from estimator
-      val saModel = stackedAutoencoder.fit(df)
-      saModel.setInputCol("input").setOutputCol("encoded")
-      // encoding
-      val encodedData = saModel.transform(df)
-      // decoding
-      saModel.setInputCol("encoded").setOutputCol("decoded")
-      val decodedData = saModel.decode(encodedData)
-      // epsilon == 1/100 of the maximum value
-      val eps = if (is01) 1.0 / 100 else 10.0 / 100
-      decodedData.collect.foreach { case Row(input: Vector, _: Vector, decoded: Vector) =>
-        assert(input ~== decoded absTol eps)
-      }
-    }
-  }
+//  test("Autoencoder reconstructs the original data by encoding and decoding") {
+//    val dataSets = Seq(binaryData, real01Data, realData)
+//    val dataTypes = Seq(true, true, false)
+//    val dataSetAndTypes = dataSets.zip(dataTypes)
+//    for ((data, is01) <- dataSetAndTypes) {
+//      val rdd = sc.parallelize(data, 1).map(x => Tuple1(x))
+//      val df = sqlContext.createDataFrame(rdd).toDF("input")
+//      val stackedAutoencoder = new StackedAutoencoder()
+//        .setLayers(Array(4, 3, 3))
+//        .setBlockSize(1)
+//        .setMaxIter(100)
+//        .setSeed(123L)
+//        .setTol(1e-6)
+//        .setInputCol("input")
+//        .setOutputCol("output")
+//        .setDataIn01Interval(is01)
+//        .setBuildDecoder(true)
+//      // TODO: find a way to inherit the input and output parameter value from estimator
+//      val saModel = stackedAutoencoder.fit(df)
+//      saModel.setInputCol("input").setOutputCol("encoded")
+//      // encoding
+//      val encodedData = saModel.transform(df)
+//      // decoding
+//      saModel.setInputCol("encoded").setOutputCol("decoded")
+//      val decodedData = saModel.decode(encodedData)
+//      // epsilon == 1/100 of the maximum value
+//      val eps = if (is01) 1.0 / 100 else 10.0 / 100
+//      decodedData.collect.foreach { case Row(input: Vector, _: Vector, decoded: Vector) =>
+//        assert(input ~== decoded absTol eps)
+//      }
+//    }
+//  }
 
   test("Autoencoder use for pre-training") {
-    
+    val dataFrame = sqlContext.createDataFrame(Seq(
+      (Vectors.dense(0.0, 0.0), 0.0),
+      (Vectors.dense(0.0, 1.0), 1.0),
+      (Vectors.dense(1.0, 0.0), 1.0),
+      (Vectors.dense(1.0, 1.0), 0.0))
+    ).toDF("features", "label")
+    val layers = Array[Int](2, 7, 6, 5, 4, 3, 2)
+    val initialWeights = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setSeed(12L)
+      .generateWeights()
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setWeights(initialWeights.copy)
+      .setMaxIter(100)
+      .setTol(1e-6)
+    val badModel = trainer.fit(dataFrame)
+    val badResult = badModel.transform(dataFrame)
+    val badPredictionAndLabels = badResult.select("prediction", "label").collect()
+    // solution converged to a bad optimum
+    assert(!badPredictionAndLabels.forall { case Row(p: Double, l: Double) =>
+      p == l
+    }, "Model should not predict as expected")
+//    badPredictionAndLabels.foreach { case Row(p: Double, l: Double) =>
+//      println(p + " " + l)
+//    }
+
+    // pre-train all layers except last as stacked autoencoder
+    val encoderLayers = layers.init
+    val autoEncoder = new StackedAutoencoder("stackedAutoencoder")
+      .setBlockSize(1)
+      .setBuildDecoder(false)
+      .setDataIn01Interval(true)
+      .setInputCol("features")
+      .setLayers(encoderLayers)
+      .setMaxIter(40)
+      .setSeed(123L)
+      .setTol(1e-6)
+    val autoEncoderModel = autoEncoder.fit(dataFrame)
+    val autoEncoderWeights = autoEncoderModel.encoderWeights
+    // initialize weights for the classifier and copy pre-trained weights
+    System.arraycopy(
+      autoEncoderWeights.toArray, 0, initialWeights.toArray, 0, autoEncoderWeights.toArray.length)
+    val preTrainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setWeights(initialWeights)
+      .setMaxIter(40)
+      .setTol(1e-6)
+    val preModel = preTrainer.fit(dataFrame)
+    val preResult = preModel.transform(dataFrame)
+    val predictionAndLabels = preResult.select("prediction", "label").collect()
+    predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
+      //p == l
+      println(p + " " + l)
+    }
   }
 }
