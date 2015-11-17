@@ -19,10 +19,11 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.ml.ann.{FeedForwardTrainer, EmptyLayerWithSquaredError, FeedForwardTopology}
+import org.apache.spark.ml.param.shared.{HasOutputCol, HasInputCol}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.ml.{Model, Estimator}
 import org.apache.spark.ml.classification.MultilayerPerceptronParams
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{BooleanParam, Params, ParamMap}
 import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, Vector}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{Row, DataFrame}
@@ -30,11 +31,42 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 import breeze.linalg.{DenseVector => BDV}
 
+/**
+ * Params for [[StackedAutoencoder]].
+ */
+private[feature] trait StackedAutoencoderParams extends Params with HasInputCol with HasOutputCol {
+  /**
+   * True if data is in [0, 1] interval.
+   * Default: false
+   * @group expertParam
+   */
+  final val dataIn01Interval: BooleanParam = new BooleanParam(this, "dataIn01Interval",
+    "True if data is in [0, 1] interval." +
+      " Sets the layer on the top of the autoencoder: linear + sigmoid (true) " +
+      " or linear (false)")
+
+  /** @group getParam */
+  final def getDataIn01Interval: Boolean = $(dataIn01Interval)
+
+  /**
+   * True if one wants to have decoder.
+   * Default: false
+   * @group expertParam
+   */
+  final val buildDecoder: BooleanParam = new BooleanParam(this, "buildDecoder",
+    "True to produce a decoder.")
+
+  /** @group getParam */
+  final def getBuildDecoder: Boolean = $(buildDecoder)
+
+  setDefault(dataIn01Interval -> true, buildDecoder -> false)
+}
+
 
 @Experimental
 class StackedAutoencoder (override val uid: String)
   extends Estimator[StackedAutoencoderModel]
-  with MultilayerPerceptronParams with AutoencoderParams {
+  with MultilayerPerceptronParams with StackedAutoencoderParams {
 
   def this() = this(Identifiable.randomUID("stackedAutoencoder"))
 
@@ -182,7 +214,7 @@ class StackedAutoencoderModel private[ml] (
     val layers: Array[Int],
     val encoderWeights: Vector,
     val decoderWeights: Vector,
-    linearOutput: Boolean) extends Model[StackedAutoencoderModel] with AutoencoderParams {
+    linearOutput: Boolean) extends Model[StackedAutoencoderModel] with StackedAutoencoderParams {
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
