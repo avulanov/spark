@@ -88,7 +88,6 @@ class StackedAutoencoder (override val uid: String)
    * Fits a model to the input data.
    */
   override def fit(dataset: DataFrame): StackedAutoencoderModel = {
-    println("Topology:" + $(layers).mkString(" "))
     var stackedEncoderOffset = 0
     val stackedEncoderWeights = if ($(weights) == null) {
       val size =
@@ -112,27 +111,28 @@ class StackedAutoencoder (override val uid: String)
     }
     // TODO: use single instance of vectors
     var data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
-    val linearOutput = !$(dataIn01Interval)
+    val linearInput = !$(dataIn01Interval)
     // Train autoencoder for each layer except the last
     for (i <- 0 until $(layers).length - 1) {
       val currentLayers = Array($(layers)(i), $(layers)(i + 1), $(layers)(i))
       val currentTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers, false)
       val isLastLayer = i == $(layers).length - 2
-      println("Current last+linear:" + currentLayers.mkString(" ") + " " + (isLastLayer && linearOutput))
-      if (isLastLayer && linearOutput) {
+      val isFirstLayer = i == 0
+      if (isFirstLayer && linearInput) {
         currentTopology.layers(currentTopology.layers.length - 1) = new EmptyLayerWithSquaredError()
       }
-      val FeedForwardTrainer = new FeedForwardTrainer(currentTopology, currentLayers(0), currentLayers.last)
+      val FeedForwardTrainer =
+        new FeedForwardTrainer(currentTopology, currentLayers(0), currentLayers.last)
+          .setStackSize($(blockSize))
+          .setSeed($(seed))
       FeedForwardTrainer.LBFGSOptimizer
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
-      FeedForwardTrainer
-        .setStackSize($(blockSize))
-        .setSeed($(seed))
       val currentModel = FeedForwardTrainer.train(data)
       val currentWeights = currentModel.weights.toArray
       val encoderWeightSize = currentTopology.layers(0).weightSize
-      System.arraycopy(currentWeights, 0, stackedEncoderWeights, stackedEncoderOffset, encoderWeightSize)
+      System.arraycopy(
+        currentWeights, 0, stackedEncoderWeights, stackedEncoderOffset, encoderWeightSize)
       stackedEncoderOffset += encoderWeightSize
       // input data for the next autoencoder in the stack
       if (!isLastLayer) {
@@ -140,7 +140,7 @@ class StackedAutoencoder (override val uid: String)
         // Due to Vector inefficiency it will copy weights
         val encoderModel = encoderTopology.model(
           Vectors.fromBreeze(new BDV[Double](currentWeights, 0, 1, encoderWeightSize)))
-        // TODO: add cache
+        // TODO: add cache, perform block operations
         data = data.map { x =>
           val y = encoderModel.predict(x._1)
           (y, y)
@@ -155,7 +155,7 @@ class StackedAutoencoder (override val uid: String)
       }
     }
     new StackedAutoencoderModel(uid + "model", $(layers), Vectors.dense(stackedEncoderWeights),
-      Vectors.dense(stackedDecoderWeights), linearOutput)
+      Vectors.dense(stackedDecoderWeights), linearInput)
   }
 
   override def copy(extra: ParamMap): Estimator[StackedAutoencoderModel] = defaultCopy(extra)
@@ -198,7 +198,9 @@ class StackedAutoencoderModel private[ml] (
   private val decoderModel = {
     if (decoderWeights != null) {
       val topology = FeedForwardTopology.multiLayerPerceptron(layers.reverse, false)
-      if (linearOutput) topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
+      if (linearOutput) {
+        topology.layers(topology.layers.length - 1) = new EmptyLayerWithSquaredError()
+      }
       topology.model(decoderWeights)
     } else {
       null
@@ -206,7 +208,8 @@ class StackedAutoencoderModel private[ml] (
   }
 
   override def copy(extra: ParamMap): StackedAutoencoderModel = {
-    copyValues(new StackedAutoencoderModel(uid, layers, encoderWeights, decoderWeights, linearOutput), extra)
+    copyValues(
+      new StackedAutoencoderModel(uid, layers, encoderWeights, decoderWeights, linearOutput), extra)
   }
 
   /**
@@ -221,6 +224,7 @@ class StackedAutoencoderModel private[ml] (
   def encode(dataset: DataFrame): DataFrame = transform(dataset)
 
   def decode(dataset: DataFrame): DataFrame = {
+    // TODO: show something if no decoder
     transformSchema(dataset.schema, logging = true)
     val pcaOp = udf { decoderModel.predict _ }
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))

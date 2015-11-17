@@ -20,6 +20,8 @@ package org.apache.spark.ml.feature
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
+import org.apache.spark.mllib.util.TestingUtils._
+
 import org.scalatest.FunSuite
 
 class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
@@ -51,7 +53,7 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
       val rdd = sc.parallelize(data, 1).map(x => Tuple1(x))
       val df = sqlContext.createDataFrame(rdd).toDF("input")
       val stackedAutoencoder = new StackedAutoencoder()
-        .setLayers(Array(4, 3))
+        .setLayers(Array(4, 3, 3))
         .setBlockSize(1)
         .setMaxIter(100)
         .setSeed(123L)
@@ -65,12 +67,14 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
       saModel.setInputCol("input").setOutputCol("encoded")
       // encoding
       val encodedData = saModel.transform(df)
-      encodedData.collect.foreach(println)
       // decoding
       saModel.setInputCol("encoded").setOutputCol("decoded")
       val decodedData = saModel.decode(encodedData)
-      decodedData.collect.foreach(println)
+      // epsilon == 1/100 of the maximum value
+      val eps = if (is01) 1.0 / 100 else 10.0 / 100
+      decodedData.collect.foreach { case Row(input: Vector, _: Vector, decoded: Vector) =>
+        assert(input ~== decoded absTol eps)
+      }
     }
   }
-
 }
