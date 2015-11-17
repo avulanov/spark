@@ -59,6 +59,8 @@ private[feature] trait AutoencoderParams extends Params with HasInputCol with Ha
 
   /** @group getParam */
   final def getBuildDecoder: Boolean = $(buildDecoder)
+
+  setDefault(dataIn01Interval -> true, buildDecoder -> false)
 }
 
 /**

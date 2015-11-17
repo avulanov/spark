@@ -99,7 +99,6 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   /** @group getParam */
   final def getWeights: Vector = $(weights)
 
-
   setDefault(maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1), blockSize -> 128,
     optimizer -> "LBFGS", learningRate -> 0.03, weights -> null)
 }

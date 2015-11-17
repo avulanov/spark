@@ -77,4 +77,8 @@ class StackedAutoencoderSuite extends FunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("Autoencoder use for pre-training") {
+    
+  }
 }
