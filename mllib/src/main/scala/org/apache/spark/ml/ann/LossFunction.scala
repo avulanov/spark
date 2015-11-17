@@ -67,6 +67,9 @@ private[ml] class SoftmaxLayerWithCrossEntropyLoss extends Layer {
 
 private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with LossFunction {
 
+  private val epsilon = 1e-15
+  private var epsilonMatrix: BDM[Double] = null
+
   val weights = new BDV[Double](0)
 
   def inplaceEval(x: BDM[Double], y: BDM[Double]): Unit = {
@@ -106,8 +109,11 @@ private[ann] class SoftmaxLayerModelWithCrossEntropyLoss extends LayerModel with
   override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
 
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
+    if (epsilonMatrix == null || epsilonMatrix.cols != target.cols) {
+      epsilonMatrix = BDM.fill[Double](target.rows, target.cols)(epsilon)
+    }
     UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    -Bsum( target :* Blog(output)) / output.cols
+    -Bsum( target :* Blog(output + epsilonMatrix)) / output.cols
   }
 }
 

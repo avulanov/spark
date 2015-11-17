@@ -129,7 +129,6 @@ class StackedAutoencoder (override val uid: String)
         .setConvergenceTol($(tol))
         .setNumIterations($(maxIter))
       val currentModel = FeedForwardTrainer.train(data)
-      println("trained")
       val currentWeights = currentModel.weights.toArray
       val encoderWeightSize = currentTopology.layers(0).weightSize
       System.arraycopy(
