@@ -30,6 +30,7 @@ import org.apache.spark.sql.{Row, DataFrame}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 import breeze.linalg.{DenseVector => BDV}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Params for [[StackedAutoencoder]].
@@ -59,7 +60,18 @@ private[feature] trait StackedAutoencoderParams extends Params with HasInputCol 
   /** @group getParam */
   final def getBuildDecoder: Boolean = $(buildDecoder)
 
-  setDefault(dataIn01Interval -> true, buildDecoder -> false)
+  /**
+   * True to cache the intermediate data in memory. Otherwise disk caching is used.
+   * Default: true
+   * @group expertParam
+   */
+  final val memoryOnlyCaching: BooleanParam = new BooleanParam(this, "memoryOnlyCaching",
+    "True to cache the intermediate data in memory only.")
+
+  /** @group getParam */
+  final def getMemoryOnlyCaching: Boolean = $(memoryOnlyCaching)
+
+  setDefault(dataIn01Interval -> true, buildDecoder -> false, memoryOnlyCaching -> true)
 }
 
 
@@ -120,6 +132,8 @@ class StackedAutoencoder (override val uid: String)
    * Fits a model to the input data.
    */
   override def fit(dataset: DataFrame): StackedAutoencoderModel = {
+    val storageLevel =
+      if ($(memoryOnlyCaching)) StorageLevel.MEMORY_ONLY else StorageLevel.DISK_ONLY
     var stackedEncoderOffset = 0
     val stackedEncoderWeights = if ($(weights) == null) {
       val size =
@@ -143,6 +157,7 @@ class StackedAutoencoder (override val uid: String)
     }
     // TODO: use single instance of vectors
     var data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
+    var previousData = data
     val linearInput = !$(dataIn01Interval)
     // Train autoencoder for each layer except the last
     for (i <- 0 until $(layers).length - 1) {
@@ -167,16 +182,25 @@ class StackedAutoencoder (override val uid: String)
         currentWeights, 0, stackedEncoderWeights, stackedEncoderOffset, encoderWeightSize)
       stackedEncoderOffset += encoderWeightSize
       // input data for the next autoencoder in the stack
-      if (!isLastLayer) {
+      if (!isLastLayer) { // intermediate layers
         val encoderTopology = FeedForwardTopology.multiLayerPerceptron(currentLayers.init, false)
         // Due to Vector inefficiency it will copy weights
         val encoderModel = encoderTopology.model(
           Vectors.fromBreeze(new BDV[Double](currentWeights, 0, 1, encoderWeightSize)))
-        // TODO: add cache, perform block operations
+        // TODO: perform block operations
+        previousData = data
         data = data.map { x =>
           val y = encoderModel.predict(x._1)
           (y, y)
         }
+        // persist and materialize the intermediate data
+        data.persist(storageLevel)
+        data.count()
+        // unpersist the data that is persisted inside the loop
+        if (!isFirstLayer) previousData.unpersist()
+      } else { // last layer
+        // unpersist the data that remains from the last intermediate layer
+        if (!isFirstLayer) data.unpersist()
       }
       // if needs decoder
       if ($(buildDecoder)) {
