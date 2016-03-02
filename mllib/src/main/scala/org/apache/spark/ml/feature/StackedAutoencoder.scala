@@ -156,7 +156,7 @@ class StackedAutoencoder (override val uid: String)
       new Array[Double](0)
     }
     // TODO: use single instance of vectors
-    var data = dataset.select($(inputCol)).map { case Row(x: Vector) => (x, x) }
+    var data = dataset.select($(inputCol)).rdd.map { case Row(x: Vector) => (x, x) }
     var previousData = data
     val linearInput = !$(dataIn01Interval)
     // Train autoencoder for each layer except the last
