@@ -23,7 +23,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 /**
  * In-place DGEMM and DGEMV for Breeze
  */
-private[ann] object BreezeUtil {
+private[ml] object BreezeUtil {
 
   // TODO: switch to MLlib BLAS interface
   private def transposeString(a: BDM[Double]): String = if (a.isTranspose) "T" else "N"
