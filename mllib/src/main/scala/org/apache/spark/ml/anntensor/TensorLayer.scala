@@ -20,11 +20,18 @@ package org.apache.spark.ml.anntensor
 import java.util.Random
 
 import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy}
+import org.apache.spark.ml.ann.DenseTensor
 import org.apache.spark.ml.ann.BreezeUtil
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
+
+object AnnTypes {
+  type Tensor = DenseTensor[Double]
+}
+
+import AnnTypes._
 
 /**
   * Trait that holds Layer properties, that are needed to instantiate it.

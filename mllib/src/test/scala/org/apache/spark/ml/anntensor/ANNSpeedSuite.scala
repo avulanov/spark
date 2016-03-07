@@ -37,6 +37,12 @@ class ANNSpeedSuite extends SparkFunSuite with MLlibTestSparkContext {
     val dataFrame = sqlContext.
       createDataFrame(MLUtils.loadLibSVMFile(sc, mnistPath + "/mnist.scale", 784)).persist()
     dataFrame.count()
+    val warmUp = new MultilayerPerceptronClassifier().setLayers(Array(784, 32, 10))
+      .setTol(10e-9)
+      .setMaxIter(2)
+      .setSeed(1234L)
+      .fit(dataFrame)
+
     val mlp = new MultilayerPerceptronClassifier().setLayers(Array(784, 32, 10))
       .setTol(10e-9)
       .setMaxIter(20)
@@ -44,7 +50,8 @@ class ANNSpeedSuite extends SparkFunSuite with MLlibTestSparkContext {
     val t = System.nanoTime()
     val model = mlp.fit(dataFrame)
     val total = System.nanoTime() - t
-    println("ANN total time: " + total / 1e9 + " s. (should be ~42s. without native BLAS")
+    println("ANN total time: " + total / 1e9 +
+      " s. (should be ~37. without native BLAS with warm-up)")
     val tensorMLP = new TMLP().setLayers(Array(784, 32, 10))
       .setTol(10e-9)
       .setMaxIter(20)
@@ -52,7 +59,8 @@ class ANNSpeedSuite extends SparkFunSuite with MLlibTestSparkContext {
     val tTensor = System.nanoTime()
     val tModel = tensorMLP.fit(dataFrame)
     val totalTensor = System.nanoTime() - tTensor
-    println("Tensor total time: " + totalTensor / 1e9 + " s. (should be ~42s. without native BLAS")
+    println("Tensor total time: " + totalTensor / 1e9 +
+      " s. (should be ~37s. without native BLAS with warm-up)")
 
     val test = sqlContext.
       createDataFrame(MLUtils.loadLibSVMFile(sc, mnistPath + "/mnist.scale.t", 784)).persist()
