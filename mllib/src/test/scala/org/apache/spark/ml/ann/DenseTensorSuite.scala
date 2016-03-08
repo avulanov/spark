@@ -85,6 +85,22 @@ class DenseTensorSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(onesTensor.copyData().forall(x => x == 1.0), "All elements are 1.0")
   }
 
+  test ("axpy double precision") {
+    val alpha = 2
+    val x = DenseTensor[Double](Array[Double](0.5, 1, 1.5, 2, 2.5, 3), Array(6))
+    val y = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(6))
+    DenseTensor.axpy(alpha, x, y)
+    assert(y.copyData().deep == Array[Double](2, 4, 6, 8, 10, 12).deep)
+  }
+
+  test ("axpy single precision") {
+    val alpha = 2
+    val x = DenseTensor[Float](Array[Float](0.5f, 1f, 1.5f, 2f, 2.5f, 3f), Array(6))
+    val y = DenseTensor[Float](Array[Float](1, 2, 3, 4, 5, 6), Array(6))
+    DenseTensor.axpy(alpha, x, y)
+    assert(y.copyData().deep == Array[Float](2, 4, 6, 8, 10, 12).deep)
+  }
+
   test ("dgemm double precision") {
     val a = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(2, 3))
     val b = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(3, 2))

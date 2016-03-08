@@ -21,8 +21,10 @@ import java.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, sum => Bsum}
 import breeze.numerics.{log => Blog}
+import org.apache.spark.ml.ann.DenseTensor
 import org.apache.spark.ml.anntensor
 
+import AnnTypes._
 /**
   * Trait for loss function
   */
@@ -35,24 +37,28 @@ private[anntensor] trait LossFunction {
     * @param delta output delta to write to
     * @return
     */
-  def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double
+  def loss(output: Tensor, target: Tensor, delta: Tensor): Double
 }
 
 private[ml] class SigmoidLayerWithSquaredError extends anntensor.Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
-  override def model(weights: BDV[Double]): anntensor.LayerModel = new SigmoidLayerModelWithSquaredError()
-  override def initModel(weights: BDV[Double], random: Random): anntensor.LayerModel =
+  override def model(weights: Tensor): anntensor.LayerModel = new SigmoidLayerModelWithSquaredError()
+  override def initModel(weights: Tensor, random: Random): anntensor.LayerModel =
     new SigmoidLayerModelWithSquaredError()
 }
 
 private[anntensor] class SigmoidLayerModelWithSquaredError
   extends anntensor.FunctionalLayerModel(new anntensor.FunctionalLayer(new anntensor.SigmoidFunction)) with LossFunction {
-  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    val error = Bsum(delta :* delta) / 2 / output.cols
-    anntensor.UniversalFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
+  override def loss(output: Tensor, target: Tensor, delta: Tensor): Double = {
+    //anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
+//    val error = Bsum(delta :* delta) / 2 / output.cols
+//    anntensor.UniversalFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
+    DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    // TODO: implement
+    val error = 0 // Bsum(delta :* delta) / 2 / output.cols
+    DenseTensor.applyFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
     error
   }
 }
@@ -61,18 +67,18 @@ private[ml] class SoftmaxLayerWithCrossEntropyLoss extends anntensor.Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
-  override def model(weights: BDV[Double]): anntensor.LayerModel =
+  override def model(weights: Tensor): anntensor.LayerModel =
     new SoftmaxLayerModelWithCrossEntropyLoss()
-  override def initModel(weights: BDV[Double], random: Random): anntensor.LayerModel =
+  override def initModel(weights: Tensor, random: Random): anntensor.LayerModel =
     new SoftmaxLayerModelWithCrossEntropyLoss()
 }
 
 private[anntensor] class SoftmaxLayerModelWithCrossEntropyLoss extends anntensor.LayerModel with LossFunction {
 
   private val epsilon = 1e-15
-  private var epsilonMatrix: BDM[Double] = null
+  private var epsilonMatrix: Tensor = null
 
-  val weights = new BDV[Double](0)
+  val weights: Tensor = DenseTensor(Array(0))
 
   def inplaceEval(x: BDM[Double], y: BDM[Double]): Unit = {
     var j = 0
@@ -103,19 +109,26 @@ private[anntensor] class SoftmaxLayerModelWithCrossEntropyLoss extends anntensor
     }
   }
 
-  override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    inplaceEval(data, output)
+  override def eval(data: Tensor, output: Tensor): Unit = {
+    // TODO: implement
+    // inplaceEval(data, output)
   }
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {}
+  override def prevDelta(nextDelta: Tensor, input: Tensor, delta: Tensor): Unit = {}
 
-  override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
+  override def grad(delta: Tensor, input: Tensor, cumGrad: Tensor): Unit = {}
 
-  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    if (epsilonMatrix == null || epsilonMatrix.cols != target.cols) {
-      epsilonMatrix = BDM.fill[Double](target.rows, target.cols)(epsilon)
+  override def loss(output: Tensor, target: Tensor, delta: Tensor): Double = {
+//    if (epsilonMatrix == null || epsilonMatrix.cols != target.cols) {
+//      epsilonMatrix = BDM.fill[Double](target.rows, target.cols)(epsilon)
+//    }
+    //anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    if (epsilonMatrix == null || epsilonMatrix.shape(1) != target.shape(1)) {
+      epsilonMatrix = DenseTensor.fill(target.shape)(epsilon)
     }
-    anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    -Bsum( target :* Blog(output + epsilonMatrix)) / output.cols
+    DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    // TODO: Implement
+    //-Bsum( target :* Blog(output + epsilonMatrix)) / output.cols
+    0
   }
 }
 
@@ -123,55 +136,59 @@ private[ml] class EmptyLayerWithSquaredError extends anntensor.Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
-  override def model(weights: BDV[Double]): anntensor.LayerModel =
+  override def model(weights: Tensor): anntensor.LayerModel =
     new EmptyLayerModelWithSquaredError()
-  override def initModel(weights: BDV[Double], random: Random): anntensor.LayerModel =
+  override def initModel(weights: Tensor, random: Random): anntensor.LayerModel =
     new EmptyLayerModelWithSquaredError()
 }
 
 private[anntensor] class EmptyLayerModelWithSquaredError extends anntensor.LayerModel with LossFunction {
 
-  val weights = new BDV[Double](0)
+  val weights: Tensor = DenseTensor(Array(0))
 
-  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    Bsum(delta :* delta) / 2 / output.cols
+  override def loss(output: Tensor, target: Tensor, delta: Tensor): Double = {
+    DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    // TODO: implement
+    // Bsum(delta :* delta) / 2 / output.cols
+    0
   }
 
-  override def eval(data: BDM[Double], output: BDM[Double]): Unit = {}
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {}
-  override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
+  override def eval(data: Tensor, output: Tensor): Unit = {}
+  override def prevDelta(nextDelta: Tensor, input: Tensor, delta: Tensor): Unit = {}
+  override def grad(delta: Tensor, input: Tensor, cumGrad: Tensor): Unit = {}
 }
 
 private[ml] class SigmoidLayerWithCrossEntropyLoss extends anntensor.Layer {
   override val weightSize = 0
   override def outputSize(inputSize: Int): Int = inputSize
   override val inPlace = true
-  override def model(weights: BDV[Double]): anntensor.LayerModel =
+  override def model(weights: Tensor): anntensor.LayerModel =
     new SigmoidLayerModelWithCrossEntropyLoss()
-  override def initModel(weights: BDV[Double], random: Random): anntensor.LayerModel =
+  override def initModel(weights: Tensor, random: Random): anntensor.LayerModel =
     new SigmoidLayerModelWithCrossEntropyLoss()
 }
 
 private[anntensor] class SigmoidLayerModelWithCrossEntropyLoss
   extends anntensor.FunctionalLayerModel(new anntensor.FunctionalLayer(new anntensor.SigmoidFunction)) with LossFunction {
   // TODO: make a common place where ones matrices reside
-  private var oneMatrix: BDM[Double] = null
+  private var oneMatrix: Tensor = null
   private val epsilon = 1e-15
-  private var epsilonMatrix: BDM[Double] = null
+  private var epsilonMatrix: Tensor = null
 
-  override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    if (oneMatrix == null || oneMatrix.cols != target.cols) {
-      oneMatrix = BDM.ones[Double](target.rows, target.cols)
+  override def loss(output: Tensor, target: Tensor, delta: Tensor): Double = {
+    if (oneMatrix == null || oneMatrix.shape(1) != target.shape(1)) {
+      oneMatrix = DenseTensor.fill(target.shape)(1)
     }
-    if (epsilonMatrix == null || epsilonMatrix.cols != target.cols) {
-      epsilonMatrix = BDM.fill[Double](target.rows, target.cols)(epsilon)
+    if (epsilonMatrix == null || epsilonMatrix.shape(1) != target.shape(1)) {
+      epsilonMatrix = DenseTensor.fill(target.shape)(epsilon)
     }
-    anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
+    // TODO: implement
+    0
     // NB: operation :* don't have execution priority over summation
     // TODO: is adding epsilon a good way to fight log(o) ?
-    -Bsum((target :* Blog(output + epsilonMatrix)) +
-      ((oneMatrix - target) :* Blog(oneMatrix - output + epsilonMatrix))) / output.cols
+//    -Bsum((target :* Blog(output + epsilonMatrix)) +
+//      ((oneMatrix - target) :* Blog(oneMatrix - output + epsilonMatrix))) / output.cols
   }
 }
 

@@ -20,15 +20,18 @@ package org.apache.spark.ml.anntensor
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.ann.DenseTensor
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+
+import AnnTypes._
 
 class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Gradient computation against numerical differentiation") {
-    val input = new BDM[Double](3, 1, Array(1.0, 1.0, 1.0))
+    val input: Tensor = DenseTensor(Array(1.0, 1.0, 1.0), Array(3, 1))
     // output must contain zeros and one 1 for SoftMax
-    val target = new BDM[Double](2, 1, Array(0.0, 1.0))
+    val target: Tensor = DenseTensor(Array(0.0, 1.0), Array(2, 1))
     val topology = FeedForwardTopology.multiLayerPerceptron(Array(3, 4, 2), softmaxOnTop = false)
     val layersWithErrors = Seq(
       new SigmoidLayerWithSquaredError(),
@@ -65,11 +68,11 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  private def computeLoss(input: BDM[Double], target: BDM[Double], model: TopologyModel): Double = {
+  private def computeLoss(input: Tensor, target: Tensor, model: TopologyModel): Double = {
     val outputs = model.forward(input)
     model.layerModels.last match {
       case layerWithLoss: LossFunction =>
-        layerWithLoss.loss(outputs.last, target, new BDM[Double](target.rows, target.cols))
+        layerWithLoss.loss(outputs.last, target, DenseTensor(target.shape))
       case _ =>
         throw new UnsupportedOperationException("Top layer is required to have loss." +
           " Failed layer:" + model.layerModels.last.getClass)

@@ -35,6 +35,7 @@ class DenseTensor[@specialized(Double, Float) T] private[ann] (
   val data: Array[T],
   tensorShape: Array[Int],
   val offset: Int) {
+  // TODO: figure out which of size, shape etc can be removed or replaced in other functions
   private val actualSize = data.length - offset
   private var _isTransposed = false
   val requiredSize = tensorShape.product
@@ -68,6 +69,21 @@ class DenseTensor[@specialized(Double, Float) T] private[ann] (
     this
   }
 
+  def update(index: Int, value: T): Unit = {
+    require(index >=0 && index < requiredSize)
+    data(this.offset + index)  = value
+  }
+
+  /**
+    * Get the value at position index
+    * @param index index
+    * @return value
+    */
+  def value(index: Int): T = {
+    require(index >=0 && index < requiredSize)
+    data(this.offset + index)
+  }
+
   /**
    * Get the value at position index
    * @param index index
@@ -96,9 +112,10 @@ class DenseTensor[@specialized(Double, Float) T] private[ann] (
    * It is used for operations such as gemm.
    * @return self
    */
-  def transpose: DenseTensor[T] = {
-    _isTransposed = true
-    this
+  def transpose(implicit m: ClassTag[T]): DenseTensor[T] = {
+    val transposedTensor = DenseTensor[T](data, tensorShape, offset)
+    transposedTensor._isTransposed = true
+    transposedTensor
   }
 
   /**
@@ -357,6 +374,31 @@ object DenseTensor {
       beta, y.data, y.offset, 1 /* y.shape(0) */ /* y.stride */)
   }
 
+  /**
+    * y := alpha * x + y
+    * @param alpha alpha
+    * @param x vector x
+    * @param y vector y
+    */
+  def axpy(alpha: Double, x: DenseTensor[Double], y: DenseTensor[Double]): Unit = {
+    require(x.size == y.size, "x and y sizes equals")
+    val n = x.size
+    NativeBLAS.daxpy(n, alpha, x.data, 1, y.data, 1)
+  }
+
+  /**
+    * y := alpha * x + y
+    * @param alpha alpha
+    * @param x vector x
+    * @param y vector y
+    */
+  def axpy(alpha: Float, x: DenseTensor[Float], y: DenseTensor[Float]): Unit = {
+    require(x.size == y.size, "x and y sizes equals")
+    val n = x.size
+    NativeBLAS.saxpy(n, alpha, x.data, 1, y.data, 1)
+  }
+
+
   protected def elementwise(
   a: DenseTensor[Double],
   b: DenseTensor[Double],
@@ -369,6 +411,11 @@ object DenseTensor {
     }
   }
 
+  /**
+    * Elementwise product a := a * b
+    * @param a vector a
+    * @param b vector b
+    */
   def elementwiseProduct(a: DenseTensor[Double], b: DenseTensor[Double]): Unit = {
     elementwise(a, b, (x, y) => x * y)
   }

@@ -19,10 +19,10 @@ package org.apache.spark.ml.anntensor
 
 import java.util.Random
 
-import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy}
+//import breeze.linalg.{*, DenseMatrix => BDM, DenseVector => BDV, Vector => BV, axpy => Baxpy}
 import org.apache.spark.ml.ann.DenseTensor
-import org.apache.spark.ml.ann.BreezeUtil
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+//import org.apache.spark.ml.ann.BreezeUtil
+import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -70,7 +70,7 @@ private[anntensor] trait Layer extends Serializable {
     * @param weights vector with layer weights
     * @return the layer model
     */
-  def model(weights: BDV[Double]): LayerModel
+  def model(weights: Tensor): LayerModel
   /**
     * Returns the instance of the layer with random generated weights
     *
@@ -78,7 +78,7 @@ private[anntensor] trait Layer extends Serializable {
     * @param random random number generator
     * @return the layer model
     */
-  def initModel(weights: BDV[Double], random: Random): LayerModel
+  def initModel(weights: Tensor, random: Random): LayerModel
 }
 
 /**
@@ -88,14 +88,14 @@ private[anntensor] trait Layer extends Serializable {
   */
 private[anntensor] trait LayerModel extends Serializable {
 
-  val weights: BDV[Double]
+  val weights: Tensor
   /**
     * Evaluates the data (process the data through the layer)
     *
     * @param data data
     * @param output output to write to
     */
-  def eval(data: BDM[Double], output: BDM[Double]): Unit
+  def eval(data: Tensor, output: Tensor): Unit
 
   /**
     * Computes the delta for back propagation
@@ -105,7 +105,7 @@ private[anntensor] trait LayerModel extends Serializable {
     * @param pDelta storage for the result, the previous delta
     * @return delta
     */
-  def prevDelta(delta: BDM[Double], output: BDM[Double], pDelta: BDM[Double]): Unit
+  def prevDelta(delta: Tensor, output: Tensor, pDelta: Tensor): Unit
 
   /**
     * Computes the gradient
@@ -115,7 +115,7 @@ private[anntensor] trait LayerModel extends Serializable {
     * @param cumGrad cumulative gradient
     * @return gradient
     */
-  def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit
+  def grad(delta: Tensor, input: Tensor, cumGrad: Tensor): Unit
 }
 
 /**
@@ -132,9 +132,9 @@ private[anntensor] class AffineLayer(val numIn: Int, val numOut: Int) extends La
 
   override val inPlace = false
 
-  override def model(weights: BDV[Double]): LayerModel = new AffineLayerModel(weights, this)
+  override def model(weights: Tensor): LayerModel = new AffineLayerModel(weights, this)
 
-  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+  override def initModel(weights: Tensor, random: Random): LayerModel =
     AffineLayerModel(this, weights, random)
 }
 
@@ -145,31 +145,43 @@ private[anntensor] class AffineLayer(val numIn: Int, val numOut: Int) extends La
   * @param layer layer properties
   */
 private[anntensor] class AffineLayerModel private[anntensor] (
-                                                   val weights: BDV[Double],
+                                                   val weights: Tensor,
                                                    val layer: AffineLayer) extends LayerModel {
-  val w = new BDM[Double](layer.numOut, layer.numIn, weights.data, weights.offset)
-  val b =
-    new BDV[Double](weights.data, weights.offset + (layer.numOut * layer.numIn), 1, layer.numOut)
+//  val w = new BDM[Double](layer.numOut, layer.numIn, weights.data, weights.offset)
+//  val b =
+//    new BDV[Double](weights.data, weights.offset + (layer.numOut * layer.numIn), 1, layer.numOut)
+  val w = DenseTensor(weights.data, Array(layer.numOut, layer.numIn), weights.offset)
+  val b = DenseTensor(weights.data, Array(weights.offset + (layer.numOut * layer.numIn)), layer.numOut)
 
-  private var ones: BDV[Double] = null
+  private var ones: Tensor = null
 
-  override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    output(::, *) := b
-    BreezeUtil.dgemm(1.0, w, data, 1.0, output)
+  override def eval(data: Tensor, output: Tensor): Unit = {
+//    output(::, *) := b
+//    BreezeUtil.dgemm(1.0, w, data, 1.0, output)
+    output.fillWith(b)
+    DenseTensor.gemm(1.0, w, data, 1.0, output)
   }
 
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {
-    BreezeUtil.dgemm(1.0, w.t, nextDelta, 0.0, delta)
+  override def prevDelta(nextDelta: Tensor, input: Tensor, delta: Tensor): Unit = {
+    //BreezeUtil.dgemm(1.0, w.t, nextDelta, 0.0, delta)
+    DenseTensor.gemm(1.0, w.transpose, nextDelta, 0.0, delta)
   }
 
-  override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {
+  override def grad(delta: Tensor, input: Tensor, cumGrad: Tensor): Unit = {
     // compute gradient of weights
-    val cumGradientOfWeights = new BDM[Double](w.rows, w.cols, cumGrad.data, cumGrad.offset)
-    BreezeUtil.dgemm(1.0 / input.cols, delta, input.t, 1.0, cumGradientOfWeights)
-    if (ones == null || ones.length != delta.cols) ones = BDV.ones[Double](delta.cols)
+//    val cumGradientOfWeights = new BDM[Double](w.rows, w.cols, cumGrad.data, cumGrad.offset)
+//    BreezeUtil.dgemm(1.0 / input.cols, delta, input.t, 1.0, cumGradientOfWeights)
+//    if (ones == null || ones.length != delta.cols) ones = BDV.ones[Double](delta.cols)
+    val cumGradientOfWeights = DenseTensor(cumGrad.data, w.shape, cumGrad.offset)
+    DenseTensor.gemm(1.0 / input.shape(1), delta, input.transpose, 1.0, cumGradientOfWeights)
+    if (ones == null || ones.shape(0) != delta.shape(1)) ones =
+      DenseTensor.fill(Array(delta.shape(1)))(1)
+
     // compute gradient of bias
-    val cumGradientOfBias = new BDV[Double](cumGrad.data, cumGrad.offset + w.size, 1, b.length)
-    BreezeUtil.dgemv(1.0 / input.cols, delta, ones, 1.0, cumGradientOfBias)
+//    val cumGradientOfBias = new BDV[Double](cumGrad.data, cumGrad.offset + w.size, 1, b.length)
+//    BreezeUtil.dgemv(1.0 / input.cols, delta, ones, 1.0, cumGradientOfBias)
+    val cumGradientOfBias = DenseTensor(cumGrad.data, Array(b.shape(0)), cumGrad.offset + w.size)
+    DenseTensor.gemv(1.0 / input.shape(1), delta, ones, 1.0, cumGradientOfBias)
   }
 }
 
@@ -186,7 +198,7 @@ private[anntensor] object AffineLayerModel {
     * @param random random number generator
     * @return model of Affine layer
     */
-  def apply(layer: AffineLayer, weights: BDV[Double], random: Random): AffineLayerModel = {
+  def apply(layer: AffineLayer, weights: Tensor, random: Random): AffineLayerModel = {
     randomWeights(layer.numIn, layer.numOut, weights, random)
     new AffineLayerModel(weights, layer)
   }
@@ -202,11 +214,12 @@ private[anntensor] object AffineLayerModel {
   def randomWeights(
                      numIn: Int,
                      numOut: Int,
-                     weights: BDV[Double],
+                     weights: Tensor,
                      random: Random): Unit = {
     var i = 0
-    while (i < weights.length) {
-      weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
+    while (i < weights.size) {
+      //weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
+      weights.update(i, (random.nextDouble * 4.8 - 2.4) / numIn)
       i += 1
     }
   }
@@ -228,41 +241,41 @@ private[anntensor] trait ActivationFunction extends Serializable {
   def derivative: Double => Double
 }
 
-/**
-  * Implements in-place application of functions in the arrays
-  */
-private[anntensor] object UniversalFunction {
-
-  // TODO: use Breeze UFunc
-  def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
-    var i = 0
-    while (i < x.rows) {
-      var j = 0
-      while (j < x.cols) {
-        y(i, j) = func(x(i, j))
-        j += 1
-      }
-      i += 1
-    }
-  }
-
-  // TODO: use Breeze UFunc
-  def apply(
-             x1: BDM[Double],
-             x2: BDM[Double],
-             y: BDM[Double],
-             func: (Double, Double) => Double): Unit = {
-    var i = 0
-    while (i < x1.rows) {
-      var j = 0
-      while (j < x1.cols) {
-        y(i, j) = func(x1(i, j), x2(i, j))
-        j += 1
-      }
-      i += 1
-    }
-  }
-}
+///**
+//  * Implements in-place application of functions in the arrays
+//  */
+//private[anntensor] object UniversalFunction {
+//
+//  // TODO: use Breeze UFunc
+//  def apply(x: BDM[Double], y: BDM[Double], func: Double => Double): Unit = {
+//    var i = 0
+//    while (i < x.rows) {
+//      var j = 0
+//      while (j < x.cols) {
+//        y(i, j) = func(x(i, j))
+//        j += 1
+//      }
+//      i += 1
+//    }
+//  }
+//
+//  // TODO: use Breeze UFunc
+//  def apply(
+//             x1: BDM[Double],
+//             x2: BDM[Double],
+//             y: BDM[Double],
+//             func: (Double, Double) => Double): Unit = {
+//    var i = 0
+//    while (i < x1.rows) {
+//      var j = 0
+//      while (j < x1.cols) {
+//        y(i, j) = func(x1(i, j), x2(i, j))
+//        j += 1
+//      }
+//      i += 1
+//    }
+//  }
+//}
 
 /**
   * Implements Sigmoid activation function
@@ -287,9 +300,9 @@ private[anntensor] class FunctionalLayer (val activationFunction: ActivationFunc
 
   override val inPlace = true
 
-  override def model(weights: BDV[Double]): LayerModel = new FunctionalLayerModel(this)
+  override def model(weights: Tensor): LayerModel = new FunctionalLayerModel(this)
 
-  override def initModel(weights: BDV[Double], random: Random): LayerModel =
+  override def initModel(weights:Tensor, random: Random): LayerModel =
     model(weights)
 }
 
@@ -302,18 +315,21 @@ private[anntensor] class FunctionalLayerModel private[anntensor] (val layer: Fun
   extends LayerModel {
 
   // empty weights
-  val weights = new BDV[Double](0)
+  val weights: Tensor = DenseTensor(Array(0))
 
-  override def eval(data: BDM[Double], output: BDM[Double]): Unit = {
-    UniversalFunction(data, output, layer.activationFunction.eval)
+  override def eval(data: Tensor, output: Tensor): Unit = {
+    //UniversalFunction(data, output, layer.activationFunction.eval)
+    DenseTensor.applyFunction(data, output, layer.activationFunction.eval)
   }
 
-  override def prevDelta(nextDelta: BDM[Double], input: BDM[Double], delta: BDM[Double]): Unit = {
-    UniversalFunction(input, delta, layer.activationFunction.derivative)
-    delta :*= nextDelta
+  override def prevDelta(nextDelta: Tensor, input: Tensor, delta: Tensor): Unit = {
+//    UniversalFunction(input, delta, layer.activationFunction.derivative)
+//    delta :*= nextDelta
+    DenseTensor.applyFunction(input, delta, layer.activationFunction.derivative)
+    DenseTensor.elementwiseProduct(delta, nextDelta)
   }
 
-  override def grad(delta: BDM[Double], input: BDM[Double], cumGrad: BDV[Double]): Unit = {}
+  override def grad(delta: Tensor, input: Tensor, cumGrad: Tensor): Unit = {}
 }
 
 /**
@@ -345,7 +361,7 @@ private[anntensor] trait TopologyModel extends Serializable {
     * @param data input data
     * @return array of outputs for each of the layers
     */
-  def forward(data: BDM[Double]): Array[BDM[Double]]
+  def forward(data: Tensor): Array[Tensor]
 
   /**
     * Prediction of the model
@@ -364,7 +380,7 @@ private[anntensor] trait TopologyModel extends Serializable {
     * @param blockSize block size
     * @return error
     */
-  def computeGradient(data: BDM[Double], target: BDM[Double], cumGradient: Vector,
+  def computeGradient(data: Tensor, target: Tensor, cumGradient: Vector,
                       blockSize: Int): Double
 }
 
@@ -439,25 +455,27 @@ private[ml] class FeedForwardModel private(
   private var offset = 0
   for (i <- 0 until layers.length) {
     layerModels(i) = layers(i).model(
-      new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
+      //new BDV[Double](weights.toArray, offset, 1, layers(i).weightSize))
+     DenseTensor(weights.toArray, Array(layers(i).weightSize), offset))
     offset += layers(i).weightSize
   }
-  private var outputs: Array[BDM[Double]] = null
-  private var deltas: Array[BDM[Double]] = null
+  private var outputs: Array[Tensor] = null
+  private var deltas: Array[Tensor] = null
 
-  override def forward(data: BDM[Double]): Array[BDM[Double]] = {
+  override def forward(data: Tensor): Array[Tensor] = {
     // Initialize output arrays for all layers. Special treatment for InPlace
-    val currentBatchSize = data.cols
+    val currentBatchSize = data.shape(1)
     // TODO: allocate outputs as one big array and then create BDMs from it
-    if (outputs == null || outputs(0).cols != currentBatchSize) {
-      outputs = new Array[BDM[Double]](layers.length)
-      var inputSize = data.rows
+    if (outputs == null || outputs(0).shape(1) != currentBatchSize) {
+      outputs = new Array[Tensor](layers.length)
+      var inputSize = data.shape(0)
       for (i <- 0 until layers.length) {
         if (layers(i).inPlace) {
           outputs(i) = outputs(i - 1)
         } else {
           val outputSize = layers(i).outputSize(inputSize)
-          outputs(i) = new BDM[Double](outputSize, currentBatchSize)
+          //outputs(i) = new BDM[Double](outputSize, currentBatchSize)
+          outputs(i) = DenseTensor(Array(outputSize, currentBatchSize))
           inputSize = outputSize
         }
       }
@@ -470,19 +488,20 @@ private[ml] class FeedForwardModel private(
   }
 
   override def computeGradient(
-                                data: BDM[Double],
-                                target: BDM[Double],
+                                data: Tensor,
+                                target: Tensor,
                                 cumGradient: Vector,
                                 realBatchSize: Int): Double = {
     val outputs = forward(data)
-    val currentBatchSize = data.cols
+    val currentBatchSize = data.shape(1)
     // TODO: allocate deltas as one big array and then create BDMs from it
-    if (deltas == null || deltas(0).cols != currentBatchSize) {
-      deltas = new Array[BDM[Double]](layerModels.length)
-      var inputSize = data.rows
+    if (deltas == null || deltas(0).shape(1) != currentBatchSize) {
+      deltas = new Array[Tensor](layerModels.length)
+      var inputSize = data.shape(0)
       for (i <- 0 until layerModels.length - 1) {
         val outputSize = layers(i).outputSize(inputSize)
-        deltas(i) = new BDM[Double](outputSize, currentBatchSize)
+        //deltas(i) = new BDM[Double](outputSize, currentBatchSize)
+        deltas(i) = DenseTensor(Array(outputSize, currentBatchSize))
         inputSize = outputSize
       }
     }
@@ -501,7 +520,8 @@ private[ml] class FeedForwardModel private(
     for (i <- 0 until layerModels.length) {
       val input = if (i == 0) data else outputs(i - 1)
       layerModels(i).grad(deltas(i), input,
-        new BDV[Double](cumGradientArray, offset, 1, layers(i).weightSize))
+        //new BDV[Double](cumGradientArray, offset, 1, layers(i).weightSize))
+        DenseTensor(cumGradientArray, Array(layers(i).weightSize), offset))
       offset += layers(i).weightSize
     }
     loss
@@ -509,8 +529,10 @@ private[ml] class FeedForwardModel private(
 
   override def predict(data: Vector): Vector = {
     val size = data.size
-    val result = forward(new BDM[Double](size, 1, data.toArray))
-    Vectors.dense(result.last.toArray)
+//    val result = forward(new BDM[Double](size, 1, data.toArray))
+//    Vectors.dense(result.last.toArray)
+    val result = forward(DenseTensor(data.toArray, Array(size)))
+    Vectors.dense(result.last.data)
   }
 }
 
@@ -545,15 +567,18 @@ private[anntensor] object FeedForwardModel {
     for (i <- 0 until topology.layers.length) {
       totalSize += topology.layers(i).weightSize
     }
-    val weights = new BDV[Double](new Array[Double](totalSize))
+    //val weights = new BDV[Double](new Array[Double](totalSize))
+    val weights: Tensor = DenseTensor(Array(totalSize))
     var offset = 0
     val random = new XORShiftRandom(seed)
     for(i <- 0 until layers.length){
       layerModels(i) = layers(i).
-        initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
+        initModel(DenseTensor(weights.data, Array(layers(i).weightSize), offset), random)
+        //initModel(new BDV[Double](weights.data, offset, 1, layers(i).weightSize), random)
       offset += layers(i).weightSize
     }
-    new FeedForwardModel(Vectors.fromBreeze(weights), topology)
+    //new FeedForwardModel(Vectors.fromBreeze(weights), topology)
+    new FeedForwardModel(Vectors.dense(weights.data), topology)
   }
 }
 
@@ -604,11 +629,11 @@ private[anntensor] class DataStacker(stackSize: Int, inputSize: Int, outputSize:
   def stack(data: RDD[(Vector, Vector)]): RDD[(Double, Vector)] = {
     val stackedData = if (stackSize == 1) {
       data.map { v =>
-        (0.0,
-          Vectors.fromBreeze(BDV.vertcat(
-            v._1.toBreeze.toDenseVector,
-            v._2.toBreeze.toDenseVector))
-          ) }
+        val bigVector = new Array[Double](v._1.size + v._2.size)
+        System.arraycopy(v._1.toArray, 0, bigVector, 0, v._1.size)
+        System.arraycopy(v._2.toArray, 0, bigVector, v._1.size, v._2.size)
+        (0.0, Vectors.dense(bigVector))
+      }
     } else {
       data.mapPartitions { it =>
         it.grouped(stackSize).map { seq =>
@@ -634,11 +659,13 @@ private[anntensor] class DataStacker(stackSize: Int, inputSize: Int, outputSize:
     * @param data stacked vector
     * @return pair of matrices holding input and output data and the real stack size
     */
-  def unstack(data: Vector): (BDM[Double], BDM[Double], Int) = {
+  def unstack(data: Vector): (Tensor, Tensor, Int) = {
     val arrData = data.toArray
     val realStackSize = arrData.length / (inputSize + outputSize)
-    val input = new BDM(inputSize, realStackSize, arrData)
-    val target = new BDM(outputSize, realStackSize, arrData, inputSize * realStackSize)
+//    val input = new BDM(inputSize, realStackSize, arrData)
+//    val target = new BDM(outputSize, realStackSize, arrData, inputSize * realStackSize)
+    val input =DenseTensor(arrData, Array(inputSize, realStackSize))
+    val target = DenseTensor(arrData, Array(outputSize, realStackSize), inputSize * realStackSize)
     (input, target, realStackSize)
   }
 }
@@ -655,9 +682,10 @@ private[anntensor] class ANNUpdater extends Updater {
                         iter: Int,
                         regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    Baxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
-    (Vectors.fromBreeze(brzWeights), 0)
+//    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+//    Baxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    BLAS.axpy(-thisIterStepSize, gradient, weightsOld)
+    (weightsOld, 0)
   }
 }
 
