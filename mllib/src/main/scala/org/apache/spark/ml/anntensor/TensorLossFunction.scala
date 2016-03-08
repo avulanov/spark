@@ -19,8 +19,8 @@ package org.apache.spark.ml.anntensor
 
 import java.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, sum => Bsum}
-import breeze.numerics.{log => Blog}
+//import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, sum => Bsum}
+//import breeze.numerics.{log => Blog}
 import org.apache.spark.ml.ann.DenseTensor
 import org.apache.spark.ml.anntensor
 
@@ -56,8 +56,7 @@ private[anntensor] class SigmoidLayerModelWithSquaredError
 //    val error = Bsum(delta :* delta) / 2 / output.cols
 //    anntensor.UniversalFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    // TODO: implement
-    val error = 0 // Bsum(delta :* delta) / 2 / output.cols
+    val error = (delta :* delta).sum / 2 / output.shape(1)
     DenseTensor.applyFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
     error
   }
@@ -80,29 +79,33 @@ private[anntensor] class SoftmaxLayerModelWithCrossEntropyLoss extends anntensor
 
   val weights: Tensor = DenseTensor(Array(0))
 
-  def inplaceEval(x: BDM[Double], y: BDM[Double]): Unit = {
+  def inplaceEval(x: Tensor, y: Tensor): Unit = {
+    require(x.shape.length == 2 && y.shape.length == 2
+      && x.shape(0) == y.shape(0) && x.shape(1) == y.shape(1),
+      "X and Y must be 2 dim and of equal size")
     var j = 0
     // find max value to make sure later that exponent is computable
-    while (j < x.cols) {
+    while (j < x.shape(1)) {
       var i = 0
       var max = Double.MinValue
-      while (i < x.rows) {
-        if (x(i, j) > max) {
-          max = x(i, j)
+      while (i < x.shape(0)) {
+        if (x.value(Array(i, j)) > max) {
+          max = x.value(Array(i, j))
         }
         i += 1
       }
       var sum = 0.0
       i = 0
-      while (i < x.rows) {
-        val res = Math.exp(x(i, j) - max)
-        y(i, j) = res
+      while (i < x.shape(0)) {
+        val res = Math.exp(x.value(Array(i, j)) - max)
+        y.update(Array(i, j), res)
         sum += res
         i += 1
       }
       i = 0
-      while (i < x.rows) {
-        y(i, j) /= sum
+      while (i < x.shape(0)) {
+        val avg = y.value(Array(i, j)) / sum
+        y.update(Array(i, j), avg)
         i += 1
       }
       j += 1
@@ -110,8 +113,7 @@ private[anntensor] class SoftmaxLayerModelWithCrossEntropyLoss extends anntensor
   }
 
   override def eval(data: Tensor, output: Tensor): Unit = {
-    // TODO: implement
-    // inplaceEval(data, output)
+    inplaceEval(data, output)
   }
   override def prevDelta(nextDelta: Tensor, input: Tensor, delta: Tensor): Unit = {}
 
@@ -148,9 +150,7 @@ private[anntensor] class EmptyLayerModelWithSquaredError extends anntensor.Layer
 
   override def loss(output: Tensor, target: Tensor, delta: Tensor): Double = {
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    // TODO: implement
-    // Bsum(delta :* delta) / 2 / output.cols
-    0
+    (delta :* delta).sum / 2 / output.shape(1)
   }
 
   override def eval(data: Tensor, output: Tensor): Unit = {}
