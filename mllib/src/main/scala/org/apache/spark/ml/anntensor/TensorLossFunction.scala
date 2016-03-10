@@ -128,9 +128,10 @@ private[anntensor] class SoftmaxLayerModelWithCrossEntropyLoss extends anntensor
       epsilonMatrix = DenseTensor.fill(target.shape)(epsilon)
     }
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    // TODO: Implement
     //-Bsum( target :* Blog(output + epsilonMatrix)) / output.cols
-    0
+    val temp = output + epsilonMatrix
+    DenseTensor.applyFunction(temp, Math.log)
+    -(target :* temp).sum / output.shape(1)
   }
 }
 
@@ -183,12 +184,15 @@ private[anntensor] class SigmoidLayerModelWithCrossEntropyLoss
       epsilonMatrix = DenseTensor.fill(target.shape)(epsilon)
     }
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    // TODO: implement
-    0
     // NB: operation :* don't have execution priority over summation
     // TODO: is adding epsilon a good way to fight log(o) ?
 //    -Bsum((target :* Blog(output + epsilonMatrix)) +
 //      ((oneMatrix - target) :* Blog(oneMatrix - output + epsilonMatrix))) / output.cols
+    val temp1 = output + epsilonMatrix;
+    DenseTensor.applyFunction(temp1, Math.log)
+    val temp2 = oneMatrix - output + epsilonMatrix
+    DenseTensor.applyFunction(temp2, Math.log)
+    -(target :* temp1 + (oneMatrix - target) :* temp2).sum / output.shape(1)
   }
 }
 

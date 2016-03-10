@@ -151,7 +151,7 @@ private[anntensor] class AffineLayerModel private[anntensor] (
 //  val b =
 //    new BDV[Double](weights.data, weights.offset + (layer.numOut * layer.numIn), 1, layer.numOut)
   val w = DenseTensor(weights.data, Array(layer.numOut, layer.numIn), weights.offset)
-  val b = DenseTensor(weights.data, Array(weights.offset + (layer.numOut * layer.numIn)), layer.numOut)
+  val b = DenseTensor(weights.data, Array(layer.numOut), weights.offset + (layer.numOut * layer.numIn))
 
   private var ones: Tensor = null
 

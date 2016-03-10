@@ -35,11 +35,13 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
   val data: Array[T],
   tensorShape: Array[Int],
-  val offset: Int) {
+  val offset: Int,
+  isTransposed: Boolean = false) {
   lazy val numOps = implicitly[Numeric[T]]
   // TODO: figure out which of size, shape etc can be removed or replaced in other functions
   private val actualSize = data.length - offset
-  private var _isTransposed = false
+  // Major stride (always the first??? dimension since stored in columnar format)
+  val majorStride = if (isTransposed) tensorShape.last else tensorShape.head
   val requiredSize = tensorShape.product
   require(requiredSize <= actualSize,
     "Actual size of the array does not correspond to dimension Sizes")
@@ -129,7 +131,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     *
     * @return true if transposed, false otherwise
    */
-  def transposed: Boolean = _isTransposed
+  def transposed: Boolean = isTransposed
 
   /**
    * Transpose tensor. Does not actually transpose the data.
@@ -138,8 +140,8 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     * @return self
    */
   def transpose(implicit m: ClassTag[T]): DenseTensor[T] = {
-    val transposedTensor = DenseTensor[T](data, tensorShape, offset)
-    transposedTensor._isTransposed = true
+    require(tensorShape.length == 2, "Transpose is valid only for 2 dimensional tensor")
+    val transposedTensor = DenseTensor[T](data, tensorShape.reverse, offset, true)
     transposedTensor
   }
 
@@ -342,9 +344,9 @@ object DenseTensor {
    * @tparam T implicit type
    * @return tensor
    */
-  def apply[T: Numeric](data: Array[T], tensorShape: Array[Int], offset: Int = 0)
+  def apply[T: Numeric](data: Array[T], tensorShape: Array[Int], offset: Int = 0, isTransposed: Boolean = false)
               (implicit m: ClassTag[T]): DenseTensor[T] = {
-    new DenseTensor[T](data, tensorShape, offset)
+    new DenseTensor[T](data, tensorShape, offset, isTransposed)
   }
 
   /**
@@ -364,6 +366,21 @@ object DenseTensor {
   }
 
   /**
+    * Apply a function to tensor x in place
+    *
+    * @param x source
+    * @param func function
+    * @tparam T type
+    */
+  def applyFunction[T](x: DenseTensor[T], func: T => T): Unit = {
+    var i = x.offset
+    while (i < (x.offset + x.size)) {
+      x.data(i) = func(x.data(i))
+      i += 1
+    }
+  }
+
+  /**
    * Apply a function to tensor x and put the result in the y
    *
    * @param x source
@@ -374,7 +391,7 @@ object DenseTensor {
   def applyFunction[T](x: DenseTensor[T], y: DenseTensor[T], func: T => T): Unit = {
     require(x.size == y.size, "Tensor sizes must be equal")
     var i = y.offset
-    while (i < y.size) {
+    while (i < (y.offset + y.size)) {
       y.data(i) = func(x.data(i))
       i += 1
     }
@@ -396,7 +413,7 @@ object DenseTensor {
   func: (T, T) => T): Unit = {
     require(x1.size == y.size && x2.size == y.size, "Tensor sizes must be equal")
     var i = y.offset
-    while (i < y.size) {
+    while (i < (y.offset + y.size)) {
       y.data(i) = func(x1.data(i), x2.data(i))
       i += 1
     }
@@ -426,8 +443,8 @@ object DenseTensor {
     require(b.shape(1) == c.shape(1), "B & C Dimension mismatch!")
     NativeBLAS.dgemm(transposeString(a), transposeString(b), c.shape(0), c.shape(1), a.shape(1),
     // TODO: check majorStride
-      alpha, a.data, a.offset, a.shape(0) /* a.majorStride */,
-      b.data, b.offset, b.shape(0) /* b.majorStride */,
+      alpha, a.data, a.offset, /* a.shape(0), */ a.majorStride,
+      b.data, b.offset, /* b.shape(0) */ b.majorStride,
       beta, c.data, c.offset, c.shape(0))
   }
 
@@ -455,8 +472,8 @@ object DenseTensor {
     require(b.shape(1) == c.shape(1), "B & C Dimension mismatch!")
     NativeBLAS.sgemm(transposeString(a), transposeString(b), c.shape(0), c.shape(1), a.shape(1),
       // TODO: check majorStride
-      alpha, a.data, a.offset, a.shape(0) /* a.majorStride */,
-      b.data, b.offset, b.shape(0) /* b.majorStride */,
+      alpha, a.data, a.offset, a.majorStride,
+      b.data, b.offset, b.majorStride,
       beta, c.data, c.offset, c.shape(0))
   }
 

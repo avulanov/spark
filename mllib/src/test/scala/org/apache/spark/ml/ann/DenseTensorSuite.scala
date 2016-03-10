@@ -57,6 +57,10 @@ class DenseTensorSuite  extends SparkFunSuite with MLlibTestSparkContext {
 
   test ("apply function") {
     val shape2d = Array(4, 2)
+    val a = DenseTensor[Double](Array[Double](0, 1, 2, 3, 4, 5, 6, 7), shape2d)
+    DenseTensor.applyFunction(a, (t: Double) => t * t)
+    assert(a.copyData().deep == Array[Double](0, 1, 4, 9, 16, 25, 36, 49).deep,
+      "The result must be (1, 2, 3, 4, 5, 6, 7, 8)")
     val x = DenseTensor[Double](Array[Double](0, 1, 2, 3, 4, 5, 6, 7), shape2d)
     val y = DenseTensor[Double](shape2d)
     def func: (Double) => Double = v => v + 1
@@ -169,6 +173,14 @@ class DenseTensorSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(c.copyData().deep == Array[Double](22, 28, 49, 64).deep)
   }
 
+  test ("dgemm double precision transpose") {
+    val a = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(3, 2))
+    val b = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(3, 2))
+    val c = DenseTensor[Double](Array(2, 2))
+    DenseTensor.gemm(1.0, a.transpose, b, 0.0, c)
+    assert(c.copyData().deep == Array[Double](14, 32, 32, 77).deep)
+  }
+
   test ("dgemm single precision") {
     val a = DenseTensor[Float](Array[Float](1, 2, 3, 4, 5, 6), Array(2, 3))
     val b = DenseTensor[Float](Array[Float](1, 2, 3, 4, 5, 6), Array(3, 2))
@@ -177,6 +189,14 @@ class DenseTensorSuite  extends SparkFunSuite with MLlibTestSparkContext {
     assert(c.copyData().deep == Array[Float](22, 28, 49, 64).deep)
     DenseTensor.gemm(0.5f, a, b, 0.5f, c)
     assert(c.copyData().deep == Array[Float](22, 28, 49, 64).deep)
+  }
+
+  test ("dgemm single precision transpose") {
+    val a = DenseTensor[Float](Array[Float](1, 2, 3, 4, 5, 6), Array(3, 2))
+    val b = DenseTensor[Float](Array[Float](1, 2, 3, 4, 5, 6), Array(3, 2))
+    val c = DenseTensor[Float](Array(2, 2))
+    DenseTensor.gemm(1.0f, a.transpose, b, 0.0f, c)
+    assert(c.copyData().deep == Array[Double](14, 32, 32, 77).deep)
   }
 
   test("gemv double precision") {
