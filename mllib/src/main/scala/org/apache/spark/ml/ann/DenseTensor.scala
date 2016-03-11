@@ -409,9 +409,9 @@ object DenseTensor {
    */
   def applyFunction[T](x: DenseTensor[T], y: DenseTensor[T], func: T => T): Unit = {
     require(x.size == y.size, "Tensor sizes must be equal")
-    var i = y.offset
-    while (i < (y.offset + y.size)) {
-      y.data(i) = func(x.data(i))
+    var i = 0
+    while (i < y.size) {
+      y.data(y.offset + i) = func(x.data(x.offset + i))
       i += 1
     }
   }
@@ -431,9 +431,9 @@ object DenseTensor {
   y: DenseTensor[T],
   func: (T, T) => T): Unit = {
     require(x1.size == y.size && x2.size == y.size, "Tensor sizes must be equal")
-    var i = y.offset
+    var i = 0
     while (i < (y.offset + y.size)) {
-      y.data(i) = func(x1.data(i), x2.data(i))
+      y.data(y.offset + i) = func(x1.data(x1.offset + i), x2.data(x2.offset + i))
       i += 1
     }
   }

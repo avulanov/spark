@@ -449,6 +449,9 @@ private[ml] class FeedForwardModel private(
     cumGradient: Vector,
     realBatchSize: Int): Double = {
     val outputs = forward(data)
+    for (x <- outputs) {
+      println("outputs: " + x.toArray.mkString(" "))
+    }
     val currentBatchSize = data.cols
     // TODO: allocate deltas as one big array and then create BDMs from it
     if (deltas == null || deltas(0).cols != currentBatchSize) {
@@ -470,6 +473,9 @@ private[ml] class FeedForwardModel private(
     for (i <- (L - 2) to (0, -1)) {
       layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
     }
+    for (x <- deltas) {
+      if (x != null) println("delta: " + x.toArray.mkString(" "))
+    }
     val cumGradientArray = cumGradient.toArray
     var offset = 0
     for (i <- 0 until layerModels.length) {
@@ -478,6 +484,8 @@ private[ml] class FeedForwardModel private(
         new BDV[Double](cumGradientArray, offset, 1, layers(i).weightSize))
       offset += layers(i).weightSize
     }
+    println(cumGradient.toArray.mkString(" "))
+    println(loss)
     loss
   }
 
