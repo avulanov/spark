@@ -221,4 +221,9 @@ class DenseTensorSuite  extends SparkFunSuite with MLlibTestSparkContext {
     DenseTensor.elementwiseProduct(a, b)
     assert(a.copyData().deep == Array[Double](1, 4, 9, 16, 25, 36).deep)
   }
+
+  test ("to string") {
+    val a = DenseTensor[Double](Array[Double](1, 2, 3, 4, 5, 6), Array(2, 3))
+    println(a)
+  }
 }

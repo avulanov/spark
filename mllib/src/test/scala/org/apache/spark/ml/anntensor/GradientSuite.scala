@@ -51,8 +51,6 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
       val numWeights = weights.size
       val gradient = Vectors.dense(Array.fill[Double](numWeights)(0.0))
       val loss = model.computeGradient(input, target, gradient, 1)
-      println("Loss:" + loss)
-      println(gradient.toArray.mkString(" "))
       val eps = 1e-4
       var i = 0
       val tol = 1e-4

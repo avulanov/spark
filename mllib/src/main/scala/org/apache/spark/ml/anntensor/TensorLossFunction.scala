@@ -192,7 +192,7 @@ private[anntensor] class SigmoidLayerModelWithCrossEntropyLoss
     DenseTensor.applyFunction(temp1, Math.log)
     val temp2 = oneMatrix - output + epsilonMatrix
     DenseTensor.applyFunction(temp2, Math.log)
-    -(target :* temp1 + (oneMatrix - target) :* temp2).sum / output.shape(1)
+    -((target :* temp1) + ((oneMatrix - target) :* temp2)).sum / output.shape(1)
   }
 }
 

@@ -36,7 +36,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
   val data: Array[T],
   tensorShape: Array[Int],
   val offset: Int,
-  isTransposed: Boolean = false) {
+  isTransposed: Boolean = false) extends Serializable {
   lazy val numOps = implicitly[Numeric[T]]
   // TODO: figure out which of size, shape etc can be removed or replaced in other functions
   private val actualSize = data.length - offset
@@ -94,7 +94,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     * @param value value
     */
   def update(index: Array[Int], value: T): Unit = {
-    data(offset(index)) == value
+    data(offset(index)) = value
   }
 
   /**
@@ -316,6 +316,25 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     }
     true
   }
+
+  override def toString(): String = {
+    // TODO: implement row-by-row print
+    val buf = new StringBuilder()
+    for (i <- offset until offset + size) {
+      var product: Int = 1
+      val index = new Array[Int](myShape.length)
+      for (dim <- 0 until myShape.length - 1) {
+        val dimValue = (i / product) % myShape(dim)
+        product *= myShape(dim)
+        index(dim) = dimValue
+      }
+      index(myShape.length - 1) = i / product
+      buf.append(value(index))
+      buf.append(" ")
+    }
+    buf.toString()
+  }
+
 }
 
 object DenseTensor {
