@@ -58,6 +58,7 @@ private[anntensor] class SigmoidLayerModelWithSquaredError
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
     val error = (delta :* delta).sum / 2 / output.shape(1)
     DenseTensor.applyFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
+    println("delta x * (o - o * o): " + delta)
     error
   }
 }

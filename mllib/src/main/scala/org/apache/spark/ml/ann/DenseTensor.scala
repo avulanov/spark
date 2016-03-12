@@ -229,7 +229,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     val newData = new Array[T](size)
     var i = 0
     while (i < size) {
-      newData(i) = numOps.plus(this.data(i), other.data(i))
+      newData(i) = numOps.plus(this.data(this.offset + i), other.data(other.offset + i))
       i += 1
     }
     DenseTensor(newData, shape.clone())
@@ -246,7 +246,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     val newData = new Array[T](size)
     var i = 0
     while (i < size) {
-      newData(i) = numOps.minus(this.data(i), other.data(i))
+      newData(i) = numOps.minus(this.data(this.offset + i), other.data(other.offset + i))
       i += 1
     }
     DenseTensor(newData, shape.clone())
@@ -263,7 +263,7 @@ class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
     val newData = new Array[T](size)
     var i = 0
     while (i < size) {
-      newData(i) = numOps.times(this.data(i), other.data(i))
+      newData(i) = numOps.times(this.data(this.offset + i), other.data(other.offset + i))
       i += 1
     }
     DenseTensor(newData, shape.clone())
