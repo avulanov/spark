@@ -493,9 +493,6 @@ private[ml] class FeedForwardModel private(
                                 cumGradient: Vector,
                                 realBatchSize: Int): Double = {
     val outputs = forward(data)
-    for (x <- outputs) {
-      println("output: " + x)
-    }
     val currentBatchSize = data.shape(1)
     // TODO: allocate deltas as one big array and then create BDMs from it
     if (deltas == null || deltas(0).shape(1) != currentBatchSize) {
@@ -518,9 +515,6 @@ private[ml] class FeedForwardModel private(
     for (i <- (L - 2) to (0, -1)) {
       layerModels(i + 1).prevDelta(deltas(i + 1), outputs(i + 1), deltas(i))
     }
-    for (x <- deltas) {
-      println("delta: " + x)
-    }
     val cumGradientArray = cumGradient.toArray
     var offset = 0
     for (i <- 0 until layerModels.length) {
@@ -530,8 +524,6 @@ private[ml] class FeedForwardModel private(
         DenseTensor(cumGradientArray, Array(layers(i).weightSize), offset))
       offset += layers(i).weightSize
     }
-    println(cumGradient.toArray.mkString(" "))
-    println(loss)
     loss
   }
 
@@ -540,7 +532,8 @@ private[ml] class FeedForwardModel private(
 //    val result = forward(new BDM[Double](size, 1, data.toArray))
 //    Vectors.dense(result.last.toArray)
     val result = forward(DenseTensor(data.toArray, Array(size, 1)))
-    Vectors.dense(result.last.data)
+    // TODO: check that it was OK not to clone in the previous version
+    Vectors.dense(result.last.data.clone())
   }
 }
 

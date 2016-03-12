@@ -55,13 +55,9 @@ private[anntensor] class SigmoidLayerModelWithSquaredError
     //anntensor.UniversalFunction(output, target, delta, (o: Double, t: Double) => o - t)
 //    val error = Bsum(delta :* delta) / 2 / output.cols
 //    anntensor.UniversalFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
-    println("output: " + output)
-    println("target: " + target)
     DenseTensor.applyFunction(output, target, delta, (o: Double, t: Double) => o - t)
-    println("delta (o -t): " + delta)
     val error = (delta :* delta).sum / 2 / output.shape(1)
     DenseTensor.applyFunction(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
-    println("delta x * (o - o * o): " + delta)
     error
   }
 }
