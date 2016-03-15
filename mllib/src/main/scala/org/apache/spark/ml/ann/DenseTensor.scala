@@ -24,6 +24,26 @@ import scala.reflect.ClassTag
 
 import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 
+object Algebra {
+  trait NumberLike[@specialized (Double, Float) T] extends Serializable {
+    def plus(x: T, y: T): T
+    def minus(x: T, y: T): T
+    def times(x: T, y: T): T
+  }
+  object NumberLike {
+    implicit object NumberLikeDouble extends NumberLike[Double] {
+      def plus(x: Double, y: Double): Double = x + y
+      def minus(x: Double, y: Double): Double = x - y
+      def times(x: Double, y: Double): Double = x * y
+    }
+    implicit object NumberLikeFloat extends NumberLike[Float] {
+      def plus(x: Float, y: Float): Float = x + y
+      def minus(x: Float, y: Float): Float = x - y
+      def times(x: Float, y: Float): Float = x * y
+    }
+  }
+}
+  import Algebra.NumberLike
 /**
  * Dense tensor column-major representation. // TODO: row major??
   *
@@ -32,12 +52,11 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
  * @param offset offset in the data
  * @tparam T type
  */
-class DenseTensor[@specialized(Double, Float) T : Numeric] private[ann] (
+class DenseTensor[@specialized(Double, Float) T] private [ann] (
   val data: Array[T],
   tensorShape: Array[Int],
   val offset: Int,
-  isTransposed: Boolean = false) extends Serializable {
-  lazy val numOps = implicitly[Numeric[T]]
+  isTransposed: Boolean = false)(implicit numOps: NumberLike[T]) extends Serializable {
   // TODO: figure out which of size, shape etc can be removed or replaced in other functions
   private val actualSize = data.length - offset
   // Major stride (always the first??? dimension since stored in columnar format)
@@ -347,8 +366,8 @@ object DenseTensor {
    * @tparam T implicit type
    * @return tensor
    */
-  def apply[@specialized(Double, Float) T: Numeric](tensorShape: Array[Int])
-                                          (implicit m: ClassTag[T]): DenseTensor[T] = {
+  def apply[@specialized(Double, Float) T](tensorShape: Array[Int])
+                                          (implicit m: ClassTag[T], numOps: NumberLike[T]): DenseTensor[T] = {
     val data: Array[T] = new Array[T](tensorShape.product)
     DenseTensor(data, tensorShape)
   }
@@ -363,8 +382,8 @@ object DenseTensor {
    * @tparam T implicit type
    * @return tensor
    */
-  def apply[T: Numeric](data: Array[T], tensorShape: Array[Int], offset: Int = 0, isTransposed: Boolean = false)
-              (implicit m: ClassTag[T]): DenseTensor[T] = {
+  def apply[T](data: Array[T], tensorShape: Array[Int], offset: Int = 0, isTransposed: Boolean = false)
+              (implicit m: ClassTag[T], numOps: NumberLike[T]): DenseTensor[T] = {
     new DenseTensor[T](data, tensorShape, offset, isTransposed)
   }
 
@@ -377,9 +396,9 @@ object DenseTensor {
    * @tparam T type
    * @return tensor
    */
-  def fill[@specialized(Double, Float) T: Numeric](tensorShape: Array[Int])
+  def fill[@specialized(Double, Float) T](tensorShape: Array[Int])
                                          (elem: => T)
-                                         (implicit m: ClassTag[T]): DenseTensor[T] = {
+                                         (implicit m: ClassTag[T], numOps: NumberLike[T]): DenseTensor[T] = {
     val data: Array[T] = Array.fill[T](tensorShape.product)(elem)
     DenseTensor(data, tensorShape)
   }
