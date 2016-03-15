@@ -217,7 +217,8 @@ private[anntensor] object AffineLayerModel {
                      weights: Tensor,
                      random: Random): Unit = {
     var i = 0
-    while (i < weights.size) {
+    val sz = weights.size
+    while (i < sz) {
       //weights(i) = (random.nextDouble * 4.8 - 2.4) / numIn
       weights.update(i, (random.nextDouble * 4.8 - 2.4) / numIn)
       i += 1

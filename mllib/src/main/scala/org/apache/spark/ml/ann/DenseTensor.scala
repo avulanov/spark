@@ -71,9 +71,7 @@ class DenseTensor[@specialized(Double, Float) T] private [ann] (
     *
     * @return
    */
-  def size: Int = {
-    myShape.product
-  }
+  def size: Int = myShape.product
 
   /**
    * Shape of the tensor
@@ -245,10 +243,15 @@ class DenseTensor[@specialized(Double, Float) T] private [ann] (
     */
   def +(other: DenseTensor[T])(implicit m: ClassTag[T]): DenseTensor[T] = {
     require(equalShape(other), "Must be equal shape")
-    val newData = new Array[T](size)
+    val sz = size
+    val newData = new Array[T](sz)
+    var thisIndex = this.offset
+    var otherIndex = other.offset
     var i = 0
-    while (i < size) {
-      newData(i) = numOps.plus(this.data(this.offset + i), other.data(other.offset + i))
+    while (i < sz) {
+      newData(i) = numOps.plus(this.data(thisIndex), other.data(otherIndex))
+      thisIndex += 1
+      otherIndex += 1
       i += 1
     }
     DenseTensor(newData, shape.clone())
@@ -262,9 +265,10 @@ class DenseTensor[@specialized(Double, Float) T] private [ann] (
     */
   def -(other: DenseTensor[T])(implicit m: ClassTag[T]): DenseTensor[T] = {
     require(equalShape(other), "Must be equal shape")
-    val newData = new Array[T](size)
+    val sz = size
+    val newData = new Array[T](sz)
     var i = 0
-    while (i < size) {
+    while (i < sz) {
       newData(i) = numOps.minus(this.data(this.offset + i), other.data(other.offset + i))
       i += 1
     }
@@ -279,9 +283,10 @@ class DenseTensor[@specialized(Double, Float) T] private [ann] (
     */
   def :*(other: DenseTensor[T])(implicit m: ClassTag[T]): DenseTensor[T] = {
     require(equalShape(other), "Must be equal shape")
-    val newData = new Array[T](size)
+    val sz = size
+    val newData = new Array[T](sz)
     var i = 0
-    while (i < size) {
+    while (i < sz) {
       newData(i) = numOps.times(this.data(this.offset + i), other.data(other.offset + i))
       i += 1
     }
@@ -308,8 +313,9 @@ class DenseTensor[@specialized(Double, Float) T] private [ann] (
 
   def sum: T = {
     var i = 0
+    val sz = size
     var mySum = numOps.minus(data(0), data(0))
-    while (i < size) {
+    while (i < sz) {
       mySum = numOps.plus(mySum, data(i))
       i += 1
     }
